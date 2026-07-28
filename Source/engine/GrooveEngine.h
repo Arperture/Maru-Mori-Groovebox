@@ -4,13 +4,16 @@
 #include "ClockState.h"
 #include "Patterns.h"
 #include "parts/BassPart.h"
+#include "fx/StereoDelay.h"
+#include "fx/BloomReverb.h"
 
 namespace maru {
 
 // The groovebox core: one musical clock, four parts rendering into scratch
-// buffers, a per-part mixer with delay/reverb send buses, and a master chain.
-// M0: BassPart live, other part slots render silence; send FX are summed but
-// not yet processed (StereoDelay + BloomReverb land at M1).
+// buffers, a per-part mixer with delay/reverb send buses (StereoDelay +
+// BloomReverb, 100% wet, with a delay->reverb feed), and a master chain.
+// M1: BassPart live; acid/drums/pad slots render silence until their
+// milestones.
 class GrooveEngine {
 public:
     void prepare(double sampleRate, int maxBlockSize);
@@ -27,6 +30,8 @@ public:
 private:
     EngineParams params;
     BassPart bass;
+    StereoDelay delay;
+    BloomReverb reverb;
 
     double sr = 48000.0;
 

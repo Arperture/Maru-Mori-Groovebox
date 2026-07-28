@@ -7,6 +7,8 @@ namespace maru {
 void GrooveEngine::prepare(double sampleRate, int maxBlockSize) {
     sr = sampleRate;
     bass.prepare(sampleRate, maxBlockSize);
+    delay.prepare(sampleRate);
+    reverb.prepare(sampleRate);
     for (int p = 0; p < 4; ++p) {
         partL[p].assign((size_t) maxBlockSize, 0.0f);
         partR[p].assign((size_t) maxBlockSize, 0.0f);
@@ -107,9 +109,45 @@ void GrooveEngine::process(float* left, float* right, int numSamples,
         }
     }
 
-    // -- send FX (M1): tanh-guard the summed sends, StereoDelay 100% wet,
-    // delay->reverb feed, BloomReverb 100% wet, returns to master.
-    // M0: sends are summed but the FX are not yet instantiated.
+    // -- send FX: tanh-guard the summed sends, StereoDelay 100% wet,
+    // delay->reverb feed (the Valhalla move: echoes bloom into the tail),
+    // BloomReverb 100% wet, returns added to the dry sum.
+    const float dlyTimeS = params.dly.sync
+        ? (float) (kDelayDivBeats[params.dly.div < 0 ? 0
+                     : (params.dly.div > 8 ? 8 : params.dly.div)] * 60.0 / bpm)
+        : params.dly.timeS;
+    const float toVerb = params.dly.toVerb > tune::kDlyToVerbMax
+                       ? tune::kDlyToVerbMax : params.dly.toVerb;
+    BloomReverb::Params vp;
+    vp.decay = params.vrb.decay;
+    vp.size = params.vrb.size;
+    vp.predelayMs = params.vrb.predelayMs;
+    vp.modDepth = params.vrb.modDepth;
+    vp.modRate = params.vrb.modRate;
+    vp.lowDamp = params.vrb.lowDamp;
+    vp.highDamp = params.vrb.highDamp;
+    vp.shimmer = params.vrb.shimmer;
+    vp.shimInterval = params.vrb.shimInterval;
+    vp.freeze = params.vrb.freeze;
+
+    const float sd = tune::kSendDrive;
+    for (int i = 0; i < numSamples; ++i) {
+        const float dInL = std::tanh(sendDL[i] * sd) / sd;
+        const float dInR = std::tanh(sendDR[i] * sd) / sd;
+        float dOutL, dOutR;
+        delay.process(dInL, dInR, dOutL, dOutR, params.dly.mode,
+                      dlyTimeS, params.dly.feedback, params.dly.tone);
+
+        const float rSumL = sendRL[i] + dOutL * toVerb;
+        const float rSumR = sendRR[i] + dOutR * toVerb;
+        const float rInL = std::tanh(rSumL * sd) / sd;
+        const float rInR = std::tanh(rSumR * sd) / sd;
+        float vOutL, vOutR;
+        reverb.process(rInL, rInR, vOutL, vOutR, vp);
+
+        left[i]  += dOutL * params.dly.ret + vOutL * params.vrb.ret;
+        right[i] += dOutR * params.dly.ret + vOutR * params.vrb.ret;
+    }
 
     // -- master chain: HP -> tanh guard -> gain
     const float hpHz = params.master.hpMode == 1 ? tune::kMasterHpHiHz

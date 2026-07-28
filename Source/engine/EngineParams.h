@@ -16,29 +16,34 @@ struct TransportInfo {
 // mirror the APVTS defaults in Params.h — keep them in sync by hand.
 // ---------------------------------------------------------------------------
 
+// Avalon-topology mono sub bass (see parts/BassPart.cpp for the port notes).
 struct BassParams {
-    int   wave      = 0;     // 0 saw, 1 off (sub solo), 2 square
-    int   subWave   = 0;     // 0 sine, 1 triangle, 2 square
+    int   wave      = 0;     // main osc: 0 saw, 1 off (sub solo), 2 square
+    int   subWave   = 0;     // 0 saw, 1 triangle, 2 square
     int   subOct    = 1;     // 1 = -1 oct, 2 = -2 oct
     float subLevel  = 0.7f;
-    float cutoff    = 0.35f; // normalized 0..1 -> kBassCutoffMin..Max exponential
-    float res       = 0.25f;
-    float envMod    = 0.45f; // bipolar -1..1, mod env -> cutoff
-    float modAtt    = 0.01f; // normalized 0..1, log-mapped seconds
-    float modDec    = 0.35f;
-    float vcaModDepth = 0.0f; // bipolar; negative = drone mode (opens VCA)
+    float cutoff    = 0.4f;  // 0..1 -> 80..4200 Hz exponential
+    float res       = 0.3f;
+    float envMod    = 0.45f; // 0..1, MEG -> cutoff (4.3 oct max)
+    float tracking  = 0.3f;  // 0..1, log key tracking around D#2
+    float envDecay  = 0.5f;  // MEG decay, unaccented (0.2..2 s log)
+    float accDecay  = 0.35f; // MEG decay, accented
     float accent    = 0.6f;
-    float decayNorm = 0.4f;  // VCA decay, unaccented
-    float decayAcc  = 0.2f;  // VCA decay, accented
-    float glide     = 0.055f; // seconds, slide time (per-step override at M1)
-    float level     = 0.8f;  // part pre-mixer trim
+    float vcaDecay  = 0.75f; // 0.006..4 s log
+    float modAtt    = 0.25f; // mod env attack, 0.9 ms..6 s log
+    float modDec    = 0.4f;  // mod env decay, 1.7 ms..10 s log
+    float vcfModDepth = 0.0f; // -1..1, mod env -> cutoff (+-3 oct)
+    float vcaModDepth = 0.0f; // -1..1; negative opens the VCA (drone mode)
+    float glide     = 0.1f;  // live-MIDI slide time seconds (seq steps override)
+    int   fr        = 1;     // 0 = 70 Hz (303), 1 = 18 Hz full range (CBL sub)
+    float level     = 0.8f;
 };
 
 struct PartSeqParams {
     bool  on     = false;
     int   rate   = 0;      // index into kSeqRateBeats
     int   length = 16;
-    int   dir    = 0;      // 0 FWD, 1 REV, 2 PING-PONG, 3 RANDOM
+    int   dir    = 0;      // 0 FWD, 1 REV, 2 PENDULUM, 3 RANDOM
     float swing  = 0.0f;
 };
 
@@ -55,18 +60,19 @@ struct DelayParams {
     float timeS    = 0.5f;  // free-run seconds when !sync
     float feedback = 0.45f;
     float tone     = 0.5f;
-    bool  pingPong = true;
+    int   mode     = 1;     // 0 stereo, 1 ping-pong, 2 tape
     float toVerb   = 0.0f;  // delay output bled into the reverb send
     float ret      = 0.8f;  // return level to master
 };
 
 struct VerbParams {
-    float decay      = 0.5f;
-    float size       = 0.7f;
+    float decay      = 0.55f;
+    float size       = 0.75f;
     float predelayMs = 20.0f;
-    float modDepth   = 0.3f;
-    float lowDamp    = 0.2f;
-    float highDamp   = 0.4f;
+    float modDepth   = 0.4f;
+    float modRate    = 0.35f; // fixed pre-M-final (no APVTS param yet)
+    float lowDamp    = 0.15f;
+    float highDamp   = 0.35f;
     float shimmer    = 0.0f;
     int   shimInterval = 0;
     bool  freeze     = false;
@@ -87,5 +93,11 @@ struct EngineParams {
     MasterParams  master;
     double        freeBpm = 100.0; // internal clock when host isn't playing
 };
+
+// Shared musical tables (indices referenced by params above)
+// 1/16, 1/8, 1/16T, 1/8T, 1/4, 1/2, 1/1 — in beats
+inline constexpr double kSeqRateBeats[7] = { 0.25, 0.5, 1.0 / 6.0, 1.0 / 3.0, 1.0, 2.0, 4.0 };
+// 1/16, 1/8T, 1/8, 1/8., 1/4, 1/4., 1/2, 1/2., 1/1 — in beats
+inline constexpr double kDelayDivBeats[9] = { 0.25, 1.0 / 3.0, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0 };
 
 } // namespace maru

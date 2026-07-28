@@ -173,10 +173,144 @@ int caseRelease() {
     return fails;
 }
 
+// A CBL-flavored 16-step bassline: root/fifth motion with rests and one slide.
+GroovePatterns makeBassGroove() {
+    GroovePatterns g;
+    for (auto& s : g.bass.steps) s.gate = false;
+    const auto set = [&](int ix, int note, bool acc, bool slide, int gateLen) {
+        auto& s = g.bass.steps[ix];
+        s.gate = true; s.note = note; s.accent = acc; s.slide = slide;
+        s.gateLen = gateLen; s.slideT = 1; s.cvOct = 0.0f;
+    };
+    set(0, 33, true, false, 2);   // A1
+    set(3, 33, false, false, 1);
+    set(6, 40, false, false, 2);  // E2
+    set(7, 38, false, true, 2);   // slide E->D
+    set(10, 33, false, false, 2);
+    set(12, 45, true, false, 1);  // A2 accent pop
+    set(14, 31, false, false, 3); // G1 long
+    return g;
+}
+
+// M1: sequenced bass, dry only — audible, bounded, sub fundamental present.
+int caseBassIso() {
+    EngineParams p;
+    p.seq[0].on = true;
+    p.seq[0].rate = 1; // 1/8 steps
+    p.freeBpm = 100.0;
+    auto r = renderEvents(p, makeBassGroove(), 10.0, {});
+    int fails = 0;
+    fails += !check(allFinite(r.L, r.R), "bass-iso: finite");
+    fails += !check(peakOf(r.L, r.R) <= 1.0f, "bass-iso: peak <= 1");
+    const float body = rmsDb(r.L, 1.0, 9.0);
+    fails += !check(body > -40.0f, "bass-iso: sequenced bass audible");
+    fails += !check(body < -6.0f, "bass-iso: upper RMS bound");
+    // sub osc at -1 oct of A1 (55 Hz) = 27.5 Hz; fundamental at 55 Hz.
+    const float subDb  = goertzelDb(r.L, 55.0, 1.0, 9.0);
+    const float refDb  = goertzelDb(r.L, 5000.0, 1.0, 9.0);
+    fails += !check(subDb > refDb + 12.0f, "bass-iso: sub-heavy spectrum");
+    writeWav(gOutBase + "-bass-iso.wav", r.L, r.R);
+    return fails;
+}
+
+// M1: delay send — echo lands at the synced division after the dry hit.
+int caseSendDelay() {
+    EngineParams p;
+    p.mix.dlySend[0] = 1.0f;
+    p.dly.ret = 1.0f;
+    p.dly.feedback = 0.3f;
+    p.dly.sync = true;
+    p.dly.div = 4;         // 1 beat
+    p.dly.mode = 0;        // plain stereo (simplest timing check)
+    p.vrb.ret = 0.0f;
+    p.freeBpm = 120.0;     // 1 beat = 0.5 s
+    p.bass.vcaDecay = 0.1f; // short blip so echoes are separable
+    // let the delay's time-glide settle before the hit
+    auto r = renderEvents(p, {}, 5.0, {
+        { 2.10, 1, 45, 0.9f, true  },
+        { 2.16, 1, 45, 0.0f, false },
+    });
+    int fails = 0;
+    fails += !check(allFinite(r.L, r.R), "send-delay: finite");
+    const float echo1   = rmsDb(r.L, 2.60, 2.80); // hit + 0.5 s
+    const float between = rmsDb(r.L, 2.40, 2.55);
+    const float echo2   = rmsDb(r.L, 3.10, 3.30); // hit + 1.0 s
+    fails += !check(echo1 > between + 10.0f, "send-delay: first echo present");
+    fails += !check(echo2 > -70.0f, "send-delay: feedback repeats");
+    fails += !check(echo2 < echo1, "send-delay: feedback decays");
+    writeWav(gOutBase + "-send-delay.wav", r.L, r.R);
+    return fails;
+}
+
+// M1: reverb send — Bloom tail sustains seconds after the note, then decays.
+int caseSendReverb() {
+    EngineParams p;
+    p.mix.vrbSend[0] = 1.0f;
+    p.vrb.ret = 1.0f;
+    p.vrb.decay = 0.7f;    // T60 ~ 11 s
+    p.dly.ret = 0.0f;
+    p.bass.vcaDecay = 0.3f;
+    auto r = renderEvents(p, {}, 8.0, {
+        { 0.10, 1, 45, 0.9f, true  },
+        { 0.60, 1, 45, 0.0f, false },
+    });
+    int fails = 0;
+    fails += !check(allFinite(r.L, r.R), "send-reverb: finite");
+    fails += !check(peakOf(r.L, r.R) <= 1.0f, "send-reverb: peak <= 1");
+    const float early = rmsDb(r.L, 1.5, 2.5);
+    const float tail  = rmsDb(r.L, 6.5, 8.0);
+    fails += !check(tail > -60.0f, "send-reverb: tail alive at 6.5 s");
+    fails += !check(tail < early, "send-reverb: tail decays");
+    // stereo: the FDN taps decorrelate L/R
+    double diff = 0.0, sum = 0.0;
+    for (size_t i = (size_t) (2.0 * kSR); i < (size_t) (6.0 * kSR); ++i) {
+        diff += (double) (r.L[i] - r.R[i]) * (r.L[i] - r.R[i]);
+        sum  += (double) (r.L[i] + r.R[i]) * (r.L[i] + r.R[i]);
+    }
+    fails += !check(diff > sum * 0.01, "send-reverb: stereo tail");
+    writeWav(gOutBase + "-send-reverb.wav", r.L, r.R);
+    return fails;
+}
+
+// Always-on listening render: the current full instrument state, CBL-voiced.
+// Lightly asserted — this case exists so every milestone leaves a WAV that
+// answers "does it sound like the record yet?" (the walk-away test).
+int caseDemo() {
+    EngineParams p;
+    p.seq[0].on = true;
+    p.seq[0].rate = 1;      // 1/8
+    p.seq[0].swing = 0.15f;
+    p.freeBpm = 100.0;
+    p.bass.cutoff = 0.32f;
+    p.bass.res = 0.45f;
+    p.bass.envMod = 0.5f;
+    p.bass.subLevel = 0.8f;
+    p.mix.dlySend[0] = 0.5f;
+    p.mix.vrbSend[0] = 0.35f;
+    p.dly.sync = true;
+    p.dly.div = 3;          // dotted 1/8
+    p.dly.feedback = 0.55f;
+    p.dly.mode = 1;         // ping-pong
+    p.dly.toVerb = 0.3f;
+    p.vrb.decay = 0.65f;
+    p.vrb.shimmer = 0.25f;
+    auto r = renderEvents(p, makeBassGroove(), 20.0, {});
+    int fails = 0;
+    fails += !check(allFinite(r.L, r.R), "demo: finite");
+    fails += !check(peakOf(r.L, r.R) <= 1.0f, "demo: peak <= 1");
+    fails += !check(rmsDb(r.L, 2.0, 18.0) > -40.0f, "demo: audible");
+    writeWav(gOutBase + "-demo.wav", r.L, r.R);
+    return fails;
+}
+
 struct Case { const char* name; int (*fn)(); };
 constexpr Case kCases[] = {
-    { "smoke",   caseSmoke },
-    { "release", caseRelease },
+    { "smoke",       caseSmoke },
+    { "release",     caseRelease },
+    { "bass-iso",    caseBassIso },
+    { "send-delay",  caseSendDelay },
+    { "send-reverb", caseSendReverb },
+    { "demo",        caseDemo },
 };
 
 } // namespace
