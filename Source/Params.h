@@ -46,6 +46,11 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     const auto intp = [&](const char* id, juce::String name, int lo, int hi, int def) {
         return std::make_unique<juce::AudioParameterInt>(pid(id), name, lo, hi, def);
     };
+    const auto midiCh = [&](const char* id, juce::String name, int defIndex) {
+        juce::StringArray sa;
+        for (int c = 1; c <= 16; ++c) sa.add(juce::String(c));
+        return std::make_unique<juce::AudioParameterChoice>(pid(id), name, sa, defIndex);
+    };
 
     // ---- BASS (avalon voice) ----
     layout.add(choice("bassWave",    "Bass Wave",     { "Saw", "Off", "Square" }, 0));
@@ -158,6 +163,16 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     layout.add(onoff("vrbFreeze", "Verb Freeze", false));
     layout.add(f("vrbRet",    "Verb Return",   0.0f, 1.0f, 0.8f));
 
+    // ---- MIDI ROUTING ----
+    // per-part receive channel + the controller-focus selector (the CTRL
+    // buttons on each module; 0 = off = channel routing)
+    layout.add(midiCh("bassMidiCh", "Bass MIDI Ch", 0));
+    layout.add(midiCh("acidMidiCh", "Acid MIDI Ch", 1));
+    layout.add(midiCh("drumMidiCh", "Drum MIDI Ch", 2));
+    layout.add(midiCh("padMidiCh",  "Pad MIDI Ch",  3));
+    layout.add(choice("midiFocus",  "MIDI Focus",
+        { "Off", "Bass", "Acid", "Drums", "Pad" }, 0));
+
     // ---- MASTER ----
     layout.add(f("masterGain", "Master Gain", 0.0f, 1.5f, 0.9f));
     layout.add(choice("masterHp", "Master HP", { "18 Hz", "70 Hz" }, 0));
@@ -234,6 +249,10 @@ public:
         vrbLoDamp = r("vrbLoDamp"); vrbHiDamp = r("vrbHiDamp");
         vrbShim = r("vrbShim");   vrbShimInt = r("vrbShimInt");
         vrbFreeze = r("vrbFreeze"); vrbRet = r("vrbRet");
+
+        midiChRef[0] = r("bassMidiCh"); midiChRef[1] = r("acidMidiCh");
+        midiChRef[2] = r("drumMidiCh"); midiChRef[3] = r("padMidiCh");
+        midiFocus = r("midiFocus");
 
         masterGain = r("masterGain");
         masterHp   = r("masterHp");
@@ -329,6 +348,10 @@ public:
         e.vrb.freeze     = vrbFreeze->load() > 0.5f;
         e.vrb.ret        = vrbRet->load();
 
+        for (int p = 0; p < 4; ++p)
+            e.midiCh[p] = 1 + (int) midiChRef[p]->load();
+        e.midiFocus = (int) midiFocus->load();
+
         e.master.gain   = masterGain->load();
         e.master.hpMode = (int) masterHp->load();
         e.master.accent = masterAccent->load();
@@ -377,6 +400,7 @@ private:
     std::atomic<float>* vrbFreeze{};  std::atomic<float>* vrbRet{};
     std::atomic<float>* masterGain{}; std::atomic<float>* masterHp{};
     std::atomic<float>* masterBpm{};  std::atomic<float>* masterAccent{};
+    std::atomic<float>* midiChRef[4]{}; std::atomic<float>* midiFocus{};
 };
 
 } // namespace maru::params

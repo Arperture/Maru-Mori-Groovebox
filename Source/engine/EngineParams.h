@@ -143,6 +143,9 @@ struct EngineParams {
     DrumParams    drum;
     PadParams     pad;
     PartSeqParams seq[4];  // bass, acid, drums, pad
+    int midiCh[4] = { 1, 2, 3, 4 }; // per-part MIDI channel (1..16)
+    int midiFocus = 0;              // 0 = channel routing; 1..4 = that part
+                                    // takes ALL incoming MIDI (controller focus)
     MixerParams   mix;
     DelayParams   dly;
     VerbParams    vrb;

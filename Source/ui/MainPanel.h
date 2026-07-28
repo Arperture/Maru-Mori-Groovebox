@@ -10,7 +10,7 @@ namespace maru::ui {
 // Moog-Grandmother-style color-blocked panel: each part lives on its own
 // tinted section. Widgets are auto-built from param IDs by type (abio
 // MainPanel pattern) — bool -> toggle, choice -> combo, float -> rotary.
-class MainPanel : public juce::Component {
+class MainPanel : public juce::Component, private juce::Timer {
 public:
     static constexpr int kWidth = 1500;
     static constexpr int kHeight = 980;
@@ -43,7 +43,9 @@ private:
     void layoutSection(Section& s);
     void buildDrumSection();
     void buildPresetBar();
+    void buildCtrlButtons();
     void refreshPresetBox();
+    void timerCallback() override; // reflects midiFocus onto the CTRL buttons
 
     MaruMoriProcessor& p;
     presets::PresetManager presetMgr;
@@ -54,6 +56,8 @@ private:
     // header
     juce::ComboBox presetBox;
     juce::TextButton saveButton { "SAVE" };
+    // per-module MIDI focus selector (radio; backed by the midiFocus param)
+    std::array<juce::TextButton, 4> ctrlButtons;
     std::array<juce::TextButton, 8> loadButtons; // per drum pad
     std::array<juce::Label, 8> padPathLabels;
     std::unique_ptr<juce::FileChooser> chooser;

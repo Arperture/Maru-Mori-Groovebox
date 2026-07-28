@@ -29,9 +29,8 @@ MaruMoriEditor::MaruMoriEditor(MaruMoriProcessor& p)
     addAndMakeVisible(playTarget);
     playTarget.addItemList({ "KEYS: BASS", "KEYS: ACID", "KEYS: DRUMS", "KEYS: PAD" }, 1);
     playTarget.setSelectedId(1, juce::dontSendNotification);
-    playTarget.onChange = [this] {
-        keyboard.setMidiChannel(playTarget.getSelectedId()); // ch 1-4 -> part
-    };
+    // the keys follow the selected part's own MIDI channel param (see timer)
+    startTimer(300);
 
     setSize(maru::ui::MainPanel::kWidth, maru::ui::MainPanel::kHeight + 72);
 
@@ -46,6 +45,17 @@ MaruMoriEditor::MaruMoriEditor(MaruMoriProcessor& p)
 
 MaruMoriEditor::~MaruMoriEditor() {
     setLookAndFeel(nullptr);
+}
+
+void MaruMoriEditor::timerCallback() {
+    // Send on-screen keys on whatever channel the chosen part listens to, so
+    // the KEYS selector keeps working however the channels are configured.
+    static const char* chIds[4] = { "bassMidiCh", "acidMidiCh",
+                                    "drumMidiCh", "padMidiCh" };
+    const int part = juce::jlimit(1, 4, playTarget.getSelectedId()) - 1;
+    auto& proc = *static_cast<MaruMoriProcessor*>(&processor);
+    if (auto* v = proc.apvts.getRawParameterValue(chIds[part]))
+        keyboard.setMidiChannel(1 + (int) v->load());
 }
 
 void MaruMoriEditor::paint(juce::Graphics& g) {

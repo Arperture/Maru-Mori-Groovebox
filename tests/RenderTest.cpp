@@ -696,6 +696,53 @@ int caseBankSwitch() {
     return fails;
 }
 
+// MIDI routing: parts listen on their own configurable channels, and the
+// controller-focus selector overrides everything.
+int caseMidiRouting() {
+    int fails = 0;
+    // bass moved to channel 5: plays on 5, silent on its old channel 1
+    {
+        EngineParams p;
+        p.midiCh[0] = 5;
+        auto hit  = renderEvents(p, {}, 1.5, { { 0.1, 5, 36, 0.9f, true },
+                                               { 1.0, 5, 36, 0.0f, false } });
+        auto miss = renderEvents(p, {}, 1.5, { { 0.1, 1, 36, 0.9f, true },
+                                               { 1.0, 1, 36, 0.0f, false } });
+        fails += !check(rmsDb(hit.L, 0.2, 0.9) > -40.0f,
+                        "midi-routing: bass plays on its channel");
+        fails += !check(rmsDb(miss.L, 0.2, 0.9) < -70.0f,
+                        "midi-routing: bass silent on an unassigned channel");
+    }
+    // two parts sharing one channel layer together (louder than either solo)
+    {
+        const std::vector<Ev> evs = { { 0.1, 7, 45, 0.9f, true },
+                                      { 1.0, 7, 45, 0.0f, false } };
+        EngineParams both;
+        both.midiCh[0] = 7;
+        both.midiCh[1] = 7;
+        EngineParams bassOnly;
+        bassOnly.midiCh[0] = 7;
+        EngineParams acidOnly;
+        acidOnly.midiCh[1] = 7;
+        const float dbBoth = rmsDb(renderEvents(both, {}, 1.5, evs).L, 0.2, 0.9);
+        const float dbBass = rmsDb(renderEvents(bassOnly, {}, 1.5, evs).L, 0.2, 0.9);
+        const float dbAcid = rmsDb(renderEvents(acidOnly, {}, 1.5, evs).L, 0.2, 0.9);
+        const float solo = dbBass > dbAcid ? dbBass : dbAcid;
+        fails += !check(dbBoth > solo + 1.0f, "midi-routing: shared channel layers parts");
+        fails += !check(dbAcid > -50.0f, "midi-routing: acid heard on reassigned channel");
+    }
+    // focus: acid takes a note on a channel nobody is assigned to
+    {
+        EngineParams p;
+        p.midiFocus = 2; // acid
+        auto r = renderEvents(p, {}, 1.5, { { 0.1, 9, 45, 0.9f, true },
+                                            { 1.0, 9, 45, 0.0f, false } });
+        fails += !check(rmsDb(r.L, 0.2, 0.9) > -40.0f,
+                        "midi-routing: focus routes any channel to the module");
+    }
+    return fails;
+}
+
 // Always-on listening render: the current full instrument state, CBL-voiced.
 // Lightly asserted — this case exists so every milestone leaves a WAV that
 // answers "does it sound like the record yet?" (the walk-away test).
@@ -778,6 +825,7 @@ constexpr Case kCases[] = {
     { "fx-worst-case", caseFxWorstCase },
     { "mixer-pan",   caseMixerPan },
     { "bank-switch", caseBankSwitch },
+    { "midi-routing", caseMidiRouting },
     { "demo",        caseDemo },
 };
 

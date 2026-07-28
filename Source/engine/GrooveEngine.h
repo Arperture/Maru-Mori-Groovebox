@@ -26,7 +26,8 @@ public:
     // refreshed every block by the processor; null slots use the DefaultKit
     void setDrumSamples(const SampleBuffer* const bufs[8]) { drums.setSamples(bufs); }
 
-    // midiChannel 1..4 -> bass, acid, drums, pad; other channels -> bass
+    // Routing: midiFocus (if set) sends everything to one part; otherwise
+    // each part listens on its own params.midiCh channel.
     void noteOn(int midiChannel, int note, float velocity);
     void noteOff(int midiChannel, int note);
     void allNotesOff();
@@ -34,6 +35,9 @@ public:
     void process(float* left, float* right, int numSamples, const TransportInfo& transport);
 
 private:
+    void partNoteOn(int part, int note, float velocity);
+    void partNoteOff(int part, int note);
+
     EngineParams params;
     BassPart bass;
     AcidPart acid;

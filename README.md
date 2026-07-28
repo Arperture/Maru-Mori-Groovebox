@@ -25,9 +25,13 @@ No Xcode needed — Command Line Tools + CMake + Ninja only.
   first impression. Sequencers start with the host transport, or free-run on
   the internal BPM in standalone.
 - The on-screen keyboard plays the part selected in **KEYS:** (bottom left).
-  From a DAW / controller: **MIDI ch 1 = Bass, 2 = Acid, 3 = Drums
-  (notes 36-43 = pads), 4 = Pad**. Sequenced mono parts ignore live notes
-  while their sequencer runs; drums always layer.
+  From a DAW / controller, each module listens on its own channel — the
+  **MIDI CH** selector in its section (defaults: Bass 1, Acid 2, Drums 3
+  with notes 36-43 = pads, Pad 4; two modules may share a channel to layer).
+  Or hit the **CTRL** button on a module: your controller then drives that
+  module regardless of channel — click again (or another module) to release.
+  Sequenced mono parts ignore live notes while their sequencer runs; drums
+  always layer.
 - **Step grid**: tabs pick the part, BANK A-D picks the pattern (bank changes
   land on the next bar). Bass/Acid: drag NOTE, click GATE/ACC/SLIDE (bass
   adds gate-length, slide-time, and a filter-CV drag row). Drums: click =

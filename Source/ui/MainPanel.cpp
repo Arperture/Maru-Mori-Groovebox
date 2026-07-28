@@ -8,16 +8,18 @@ MainPanel::MainPanel(MaruMoriProcessor& proc) : p(proc), presetMgr(proc) {
         "bassWave", "bassSubWave", "bassSubOct", "bassSubLevel", "bassCutoff",
         "bassRes", "bassEnvMod", "bassTracking", "bassDecay", "bassAccDecay",
         "bassAccent", "bassVcaDecay", "bassModAtt", "bassModDec", "bassVcfMod",
-        "bassVcaMod", "bassGlide", "bassFr", "bassLevel" });
+        "bassVcaMod", "bassGlide", "bassFr", "bassLevel", "bassMidiCh" });
 
     addSection("ACID", pal::acid, 4, {
         "acidWave", "acidCutoff", "acidRes", "acidEnvMod",
         "acidDecay", "acidAccent", "acidOctave", "acidLevel" });
+    addWidget(*sections.back(), "acidMidiCh");
 
     addSection("PAD", pal::pad, 5, {
         "padPwm", "padSubLevel", "padCutoff", "padRes", "padAttack",
         "padDecayEnv", "padSustain", "padRelease", "padLfoRate", "padLfoDepth",
         "padLfoDelay", "padChorus", "padLevel" });
+    addWidget(*sections.back(), "padMidiCh");
 
     buildDrumSection();
 
@@ -48,6 +50,42 @@ MainPanel::MainPanel(MaruMoriProcessor& proc) : p(proc), presetMgr(proc) {
     addAndMakeVisible(*stepGrid);
 
     buildPresetBar();
+    buildCtrlButtons();
+    startTimer(250);
+}
+
+void MainPanel::buildCtrlButtons() {
+    static const juce::Colour cols[4] = { pal::bass, pal::acid, pal::drums, pal::pad };
+    for (int i = 0; i < 4; ++i) {
+        auto& b = ctrlButtons[(size_t) i];
+        b.setButtonText("CTRL");
+        b.setTooltip("Focus your MIDI controller on this module "
+                     "(any channel). Click again for per-channel routing.");
+        b.setColour(juce::TextButton::textColourOffId, cols[i]);
+        addAndMakeVisible(b);
+        b.onClick = [this, i] {
+            if (auto* prm = p.apvts.getParameter("midiFocus")) {
+                const int cur = (int) prm->convertFrom0to1(prm->getValue());
+                const int next = cur == i + 1 ? 0 : i + 1; // toggle / radio
+                prm->setValueNotifyingHost(prm->convertTo0to1((float) next));
+            }
+        };
+    }
+}
+
+void MainPanel::timerCallback() {
+    int focus = 0;
+    if (auto* v = p.apvts.getRawParameterValue("midiFocus"))
+        focus = (int) v->load();
+    static const juce::Colour cols[4] = { pal::bass, pal::acid, pal::drums, pal::pad };
+    for (int i = 0; i < 4; ++i) {
+        auto& b = ctrlButtons[(size_t) i];
+        const bool on = focus == i + 1;
+        b.setColour(juce::TextButton::buttonColourId,
+                    on ? cols[i] : pal::chassis.brighter(0.1f));
+        b.setColour(juce::TextButton::textColourOffId,
+                    on ? pal::chassis : cols[i]);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +150,7 @@ void MainPanel::buildDrumSection() {
     for (int pad = 0; pad < 8; ++pad)
         for (auto* suf : kSuffix)
             addWidget(s, ("drum" + juce::String(pad + 1) + suf).toRawUTF8());
+    addWidget(s, "drumMidiCh"); // laid out beside the CTRL button in resized()
     drumSection = sections.back().get();
 
     for (int pad = 0; pad < 8; ++pad) {
@@ -271,6 +310,15 @@ void MainPanel::resized() {
     if (auto* s = find("ACID"))   s->bounds = { 666, 36, 380, 216 };
     if (auto* s = find("PAD"))    s->bounds = { 1054, 36, 438, 216 };
     if (auto* s = find("DRUMS"))  s->bounds = { 8, 260, 1484, 208 };
+
+    // CTRL focus buttons live in the part sections' title bars
+    {
+        const char* names[4] = { "BASS", "ACID", "DRUMS", "PAD" };
+        for (int i = 0; i < 4; ++i)
+            if (auto* s = find(names[i]))
+                ctrlButtons[(size_t) i].setBounds(
+                    s->bounds.getRight() - 62, s->bounds.getY() + 3, 54, 17);
+    }
     if (auto* s = find("SEQ"))    s->bounds = { 8, 476, 560, 216 };
     stepGrid->setBounds(576, 476, 916, 216);
     if (auto* s = find("MIXER"))  s->bounds = { 8, 700, 700, 156 };
@@ -282,8 +330,16 @@ void MainPanel::resized() {
         if (sp.get() != drumSection)
             layoutSection(*sp);
 
-    // drums: 8 pad columns, each = LOAD + name + 6 knobs in 2 rows of 3
+    // drums: 8 pad columns, each = LOAD + name + 6 knobs in 2 rows of 3;
+    // widget 48 is the drumMidiCh combo, parked in the title bar
     if (drumSection != nullptr) {
+        if (drumSection->widgets.size() > 48) {
+            auto& w = drumSection->widgets[48];
+            const auto r = drumSection->bounds;
+            w.comp->setBounds(r.getRight() - 130, r.getY() + 2, 60, 19);
+            if (w.label != nullptr)
+                w.label->setBounds(r.getRight() - 202, r.getY() + 4, 70, 15);
+        }
         const auto r = drumSection->bounds;
         const int colW = r.getWidth() / 8;
         for (int pad = 0; pad < 8; ++pad) {
@@ -295,6 +351,7 @@ void MainPanel::resized() {
             const int kw = col.getWidth() / 3;
             const int kh = (col.getHeight() - 4) / 2;
             for (int k = 0; k < 6; ++k) {
+                if ((size_t) (pad * 6 + k) >= 48) continue; // 48 = drumMidiCh
                 auto& w = drumSection->widgets[(size_t) (pad * 6 + k)];
                 auto cellArea = juce::Rectangle<int>(
                     col.getX() + (k % 3) * kw,

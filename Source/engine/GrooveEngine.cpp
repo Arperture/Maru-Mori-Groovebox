@@ -47,22 +47,44 @@ void GrooveEngine::setPatterns(const GroovePatterns& g) {
     setPatterns(b);
 }
 
-void GrooveEngine::noteOn(int midiChannel, int note, float velocity) {
-    switch (midiChannel) {
-        case 2: acid.noteOn(note, velocity); break;
-        case 3: drums.trigger(note - 36, velocity); break; // notes 36..43 -> pads
-        case 4: pad.noteOn(note, velocity); break;
-        default: bass.noteOn(note, velocity); break;
+void GrooveEngine::partNoteOn(int part, int note, float velocity) {
+    switch (part) {
+        case 0: bass.noteOn(note, velocity); break;
+        case 1: acid.noteOn(note, velocity); break;
+        case 2: drums.trigger(note - 36, velocity); break; // notes 36..43 -> pads
+        case 3: pad.noteOn(note, velocity); break;
     }
 }
 
-void GrooveEngine::noteOff(int midiChannel, int note) {
-    switch (midiChannel) {
-        case 2: acid.noteOff(note); break;
-        case 3: break; // one-shots: note-off is meaningless
-        case 4: pad.noteOff(note); break;
-        default: bass.noteOff(note); break;
+void GrooveEngine::partNoteOff(int part, int note) {
+    switch (part) {
+        case 0: bass.noteOff(note); break;
+        case 1: acid.noteOff(note); break;
+        case 2: break; // one-shots: note-off is meaningless
+        case 3: pad.noteOff(note); break;
     }
+}
+
+void GrooveEngine::noteOn(int midiChannel, int note, float velocity) {
+    // controller focus wins: the selected module takes everything
+    if (params.midiFocus >= 1 && params.midiFocus <= 4) {
+        partNoteOn(params.midiFocus - 1, note, velocity);
+        return;
+    }
+    // otherwise: each part listens on its own channel (parts may share one)
+    for (int p = 0; p < 4; ++p)
+        if (params.midiCh[p] == midiChannel)
+            partNoteOn(p, note, velocity);
+}
+
+void GrooveEngine::noteOff(int midiChannel, int note) {
+    if (params.midiFocus >= 1 && params.midiFocus <= 4) {
+        partNoteOff(params.midiFocus - 1, note);
+        return;
+    }
+    for (int p = 0; p < 4; ++p)
+        if (params.midiCh[p] == midiChannel)
+            partNoteOff(p, note);
 }
 
 void GrooveEngine::allNotesOff() {

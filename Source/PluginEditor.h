@@ -4,7 +4,7 @@
 #include "ui/MaruLookAndFeel.h"
 #include "ui/MainPanel.h"
 
-class MaruMoriEditor : public juce::AudioProcessorEditor {
+class MaruMoriEditor : public juce::AudioProcessorEditor, private juce::Timer {
 public:
     explicit MaruMoriEditor(MaruMoriProcessor&);
     ~MaruMoriEditor() override;
@@ -13,6 +13,8 @@ public:
     void resized() override;
 
 private:
+    void timerCallback() override; // keep the keys on the selected part's channel
+
     maru::ui::MaruLookAndFeel lnf;
     maru::ui::MainPanel panel;
     juce::MidiKeyboardComponent keyboard;
