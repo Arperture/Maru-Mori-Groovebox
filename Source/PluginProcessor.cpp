@@ -1,10 +1,45 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "GrooveState.h"
 
 MaruMoriProcessor::MaruMoriProcessor()
     : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       apvts(*this, nullptr, "PARAMS", maru::params::createParameterLayout()),
-      paramRefs(apvts) {}
+      paramRefs(apvts) {
+    writeGrooveToState(); // default patterns -> GROOVE side-block
+}
+
+void MaruMoriProcessor::loadGrooveFromState() {
+    if (!apvts.state.getChildWithName(maru::state::kGrooveType).isValid()) {
+        writeGrooveToState(); // old/absent state: keep defaults, re-create
+        return;
+    }
+    auto g = maru::state::readGroove(apvts.state);
+    const juce::SpinLock::ScopedLockType lock(grooveLock);
+    groove = g;
+}
+
+void MaruMoriProcessor::writeGrooveToState() {
+    maru::GroovePatterns g;
+    {
+        const juce::SpinLock::ScopedLockType lock(grooveLock);
+        g = groove;
+    }
+    maru::state::writeGroove(apvts.state, g);
+}
+
+void MaruMoriProcessor::setGrooveFromUi(const maru::GroovePatterns& g) {
+    {
+        const juce::SpinLock::ScopedLockType lock(grooveLock);
+        groove = g;
+    }
+    writeGrooveToState();
+}
+
+maru::GroovePatterns MaruMoriProcessor::getGroove() const {
+    const juce::SpinLock::ScopedLockType lock(grooveLock);
+    return groove;
+}
 
 void MaruMoriProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
     engine.prepare(sampleRate, samplesPerBlock);
@@ -30,6 +65,13 @@ void MaruMoriProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
     keyboardState.processNextMidiBuffer(midi, 0, numSamples, true);
 
     engine.setParams(paramRefs.snapshot());
+
+    {
+        // non-blocking: if the message thread is mid-edit, keep last patterns
+        const juce::SpinLock::ScopedTryLockType tryLock(grooveLock);
+        if (tryLock.isLocked())
+            engine.setPatterns(groove);
+    }
 
     maru::TransportInfo transport;
     if (auto* playHead = getPlayHead()) {
@@ -66,8 +108,10 @@ void MaruMoriProcessor::getStateInformation(juce::MemoryBlock& destData) {
 }
 
 void MaruMoriProcessor::setStateInformation(const void* data, int sizeInBytes) {
-    if (auto xml = getXmlFromBinary(data, sizeInBytes))
+    if (auto xml = getXmlFromBinary(data, sizeInBytes)) {
         apvts.replaceState(juce::ValueTree::fromXml(*xml));
+        loadGrooveFromState();
+    }
 }
 
 juce::AudioProcessorEditor* MaruMoriProcessor::createEditor() {

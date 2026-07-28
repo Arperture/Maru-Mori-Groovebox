@@ -33,11 +33,22 @@ public:
     juce::AudioProcessorValueTreeState apvts;
     juce::MidiKeyboardState keyboardState;
 
+    // Pattern data: authoritative copy for the audio thread, serialized into
+    // the GROOVE state ValueTree side-block (never as automatable params).
+    // Message thread edits under grooveLock; processBlock try-locks and copies.
+    void setGrooveFromUi(const maru::GroovePatterns& g);
+    maru::GroovePatterns getGroove() const;
+
 private:
     void handleMidiEvent(const juce::MidiMessage& m);
+    void loadGrooveFromState();
+    void writeGrooveToState();
 
     maru::params::ParamRefs paramRefs;
     maru::GrooveEngine engine;
+
+    mutable juce::SpinLock grooveLock;
+    maru::GroovePatterns groove;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MaruMoriProcessor)
 };

@@ -272,6 +272,110 @@ int caseSendReverb() {
     return fails;
 }
 
+// Count amplitude onsets: rising edges of a short-hop RMS envelope above
+// threshold, with a refractory window. Returns onset sample positions.
+std::vector<size_t> findOnsets(const std::vector<float>& x,
+                               float thresholdDb = -35.0f,
+                               double refractorySec = 0.15) {
+    std::vector<size_t> onsets;
+    const size_t hop = 128;
+    const size_t refractory = (size_t) (refractorySec * kSR);
+    const float th = std::pow(10.0f, thresholdDb / 20.0f);
+    bool above = false;
+    size_t lastOnset = 0;
+    for (size_t i = 0; i + hop <= x.size(); i += hop) {
+        double acc = 0.0;
+        for (size_t j = i; j < i + hop; ++j) acc += (double) x[j] * x[j];
+        const float rms = (float) std::sqrt(acc / (double) hop);
+        if (!above && rms > th) {
+            if (onsets.empty() || i - lastOnset > refractory) {
+                onsets.push_back(i);
+                lastOnset = i;
+            }
+            above = true;
+        } else if (above && rms < th * 0.4f) {
+            above = false;
+        }
+    }
+    return onsets;
+}
+
+// Quarter-note blip pattern for clock tests.
+GroovePatterns makeClickPattern() {
+    GroovePatterns g;
+    for (auto& s : g.bass.steps) {
+        s.gate = true; s.note = 45; s.accent = false; s.slide = false;
+        s.gateLen = 0; s.slideT = 0; s.cvOct = 0.0f;
+    }
+    return g;
+}
+
+EngineParams clickParams() {
+    EngineParams p;
+    p.seq[0].on = true;
+    p.seq[0].rate = 4;       // 1/4 steps
+    p.bass.vcaDecay = 0.05f; // short blips
+    p.bass.subLevel = 0.0f;  // saw only: crisp onsets
+    p.bass.cutoff = 0.8f;
+    return p;
+}
+
+// M2: host transport — ppq loop jump resyncs without double-firing or NaN.
+int caseTransportResync() {
+    GrooveEngine e;
+    e.prepare(kSR, kBlock);
+    EngineParams p = clickParams();
+    e.setParams(p);
+    e.setPatterns(makeClickPattern());
+
+    const double bpm = 120.0;                 // 1/4 step = 0.5 s
+    const int total = (int) (8.0 * kSR);
+    std::vector<float> L((size_t) total), Rr((size_t) total);
+    TransportInfo t;
+    t.bpm = bpm;
+    t.playing = true;
+    t.ppq = 0.0;
+    int done = 0;
+    while (done < total) {
+        const int n = total - done < kBlock ? total - done : kBlock;
+        // 4-beat loop in the host: ppq wraps back to 0 every 2 s
+        const double rawPpq = (double) done / kSR * (bpm / 60.0);
+        t.ppq = std::fmod(rawPpq, 4.0);
+        e.process(L.data() + done, Rr.data() + done, n, t);
+        done += n;
+    }
+    int fails = 0;
+    fails += !check(allFinite(L, Rr), "transport-resync: finite");
+    const auto onsets = findOnsets(L);
+    // 8 s at 0.5 s per step = 16 steps; loop jumps land on step boundaries so
+    // the count stays 16 (+-1 for edge effects)
+    fails += !check(onsets.size() >= 15 && onsets.size() <= 17,
+                    "transport-resync: no double/missed fires across loop jumps");
+    writeWav(gOutBase + "-transport-resync.wav", L, Rr);
+    return fails;
+}
+
+// M2: free-run — sequencer fires on the internal clock when host is stopped,
+// step spacing matches the internal BPM.
+int caseFreeRun() {
+    EngineParams p = clickParams();
+    p.freeBpm = 120.0;
+    auto r = renderEvents(p, makeClickPattern(), 6.0, {});
+    int fails = 0;
+    fails += !check(allFinite(r.L, r.R), "free-run: finite");
+    const auto onsets = findOnsets(r.L);
+    fails += !check(onsets.size() >= 11 && onsets.size() <= 13,
+                    "free-run: ~12 steps in 6 s @ 120 BPM");
+    // spacing: every gap within 5 ms of 0.5 s
+    bool spacingOk = onsets.size() >= 2;
+    for (size_t i = 1; i < onsets.size(); ++i) {
+        const double gap = (double) (onsets[i] - onsets[i - 1]) / kSR;
+        if (std::fabs(gap - 0.5) > 0.005) spacingOk = false;
+    }
+    fails += !check(spacingOk, "free-run: step spacing 0.5 s +-5 ms");
+    return fails;
+}
+
 // Always-on listening render: the current full instrument state, CBL-voiced.
 // Lightly asserted — this case exists so every milestone leaves a WAV that
 // answers "does it sound like the record yet?" (the walk-away test).
@@ -310,6 +414,8 @@ constexpr Case kCases[] = {
     { "bass-iso",    caseBassIso },
     { "send-delay",  caseSendDelay },
     { "send-reverb", caseSendReverb },
+    { "transport-resync", caseTransportResync },
+    { "free-run",    caseFreeRun },
     { "demo",        caseDemo },
 };
 
