@@ -8,6 +8,7 @@ void GrooveEngine::prepare(double sampleRate, int maxBlockSize) {
     sr = sampleRate;
     bass.prepare(sampleRate, maxBlockSize);
     acid.prepare(sampleRate, maxBlockSize);
+    drums.prepare(sampleRate, maxBlockSize);
     delay.prepare(sampleRate);
     reverb.prepare(sampleRate);
     for (int p = 0; p < 4; ++p) {
@@ -30,12 +31,13 @@ void GrooveEngine::prepare(double sampleRate, int maxBlockSize) {
 void GrooveEngine::setPatterns(const GroovePatterns& g) {
     bass.setPattern(g.bass);
     acid.setPattern(g.acid);
+    drums.setGrid(g.drums);
 }
 
 void GrooveEngine::noteOn(int midiChannel, int note, float velocity) {
     switch (midiChannel) {
         case 2: acid.noteOn(note, velocity); break;
-        case 3: break; // drums (M4)
+        case 3: drums.trigger(note - 36, velocity); break; // notes 36..43 -> pads
         case 4: break; // pad (M5)
         default: bass.noteOn(note, velocity); break;
     }
@@ -44,7 +46,7 @@ void GrooveEngine::noteOn(int midiChannel, int note, float velocity) {
 void GrooveEngine::noteOff(int midiChannel, int note) {
     switch (midiChannel) {
         case 2: acid.noteOff(note); break;
-        case 3: case 4: break;
+        case 3: case 4: break; // one-shots: note-off is meaningless
         default: bass.noteOff(note); break;
     }
 }
@@ -52,6 +54,7 @@ void GrooveEngine::noteOff(int midiChannel, int note) {
 void GrooveEngine::allNotesOff() {
     bass.allNotesOff();
     acid.allNotesOff();
+    drums.allNotesOff();
 }
 
 void GrooveEngine::process(float* left, float* right, int numSamples,
@@ -79,7 +82,9 @@ void GrooveEngine::process(float* left, float* right, int numSamples,
     bass.render(partL[0].data(), partR[0].data(), numSamples, clock);
     acid.setParams(params.acid, params.seq[1]);
     acid.render(partL[1].data(), partR[1].data(), numSamples, clock);
-    for (int p = 2; p < 4; ++p) {
+    drums.setParams(params.drum, params.seq[2]);
+    drums.render(partL[2].data(), partR[2].data(), numSamples, clock);
+    for (int p = 3; p < 4; ++p) {
         for (int i = 0; i < numSamples; ++i) {
             partL[p][i] = 0.0f;
             partR[p][i] = 0.0f;
@@ -159,18 +164,16 @@ void GrooveEngine::process(float* left, float* right, int numSamples,
     const float hpHz = params.master.hpMode == 1 ? tune::kMasterHpHiHz
                                                  : tune::kMasterHpLoHz;
     const float hpCoef = 1.0f - std::exp(-2.0f * 3.14159265f * hpHz / (float) sr);
-    const float gd = tune::kMasterGuardDrive;
     const float gain = params.master.gain;
 
+    // HP -> gain -> tanh soft clip. The clip ceiling is exactly 1.0 and it is
+    // transparent below ~-12 dBFS (<1% H3 on the sub); this is the mix bus's
+    // final safety, not a tone stage.
     for (int i = 0; i < numSamples; ++i) {
         hpL += (left[i]  - hpL) * hpCoef;
         hpR += (right[i] - hpR) * hpCoef;
-        float l = left[i]  - hpL;
-        float r = right[i] - hpR;
-        l = std::tanh(l * gd) / gd;
-        r = std::tanh(r * gd) / gd;
-        left[i]  = l * gain;
-        right[i] = r * gain;
+        left[i]  = std::tanh((left[i]  - hpL) * gain);
+        right[i] = std::tanh((right[i] - hpR) * gain);
     }
 }
 

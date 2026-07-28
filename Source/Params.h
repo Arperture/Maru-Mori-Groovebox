@@ -22,6 +22,7 @@ inline const char* kSeqIds[4][5] = {
     { "seqPadOn",  "seqPadRate",  "seqPadLen",  "seqPadDir",  "seqPadSwing"  },
 };
 inline const char* kPartName[4] = { "Bass", "Acid", "Drum", "Pad" };
+inline const char* kPadName[8] = { "Kick", "Snare", "Clap", "CH", "OH", "Tom", "Rim", "Shaker" };
 } // namespace detail
 
 inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
@@ -76,6 +77,24 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     layout.add(f("acidAccent", "Acid Accent",    0.0f, 1.0f, 0.6f));
     layout.add(choice("acidOctave", "Acid Octave", { "-1", "0", "+1" }, 1));
     layout.add(f("acidLevel",  "Acid Trim",      0.0f, 1.0f, 0.8f));
+
+    // ---- DRUMS: 8 pads x {tune, decay, cutoff, level, pan, choke} ----
+    // defaults: CH+OH share choke group 1; light default panning
+    {
+        static const float kPadPan[8]   = { 0.0f, 0.0f, 0.15f, -0.2f, -0.2f, 0.3f, -0.35f, 0.4f };
+        static const int   kPadChoke[8] = { 0, 0, 0, 1, 1, 0, 0, 0 };
+        for (int d = 0; d < 8; ++d) {
+            const juce::String base = "drum" + juce::String(d + 1);
+            const juce::String nm = detail::kPadName[d];
+            layout.add(f((base + "Tune").toRawUTF8(),  nm + " Tune", -24.0f, 24.0f, 0.0f));
+            layout.add(f((base + "Decay").toRawUTF8(), nm + " Decay", 0.0f, 1.0f, 1.0f));
+            layout.add(f((base + "Cut").toRawUTF8(),   nm + " Cutoff", 0.0f, 1.0f, 1.0f));
+            layout.add(f((base + "Lvl").toRawUTF8(),   nm + " Level", 0.0f, 1.0f, 0.8f));
+            layout.add(f((base + "Pan").toRawUTF8(),   nm + " Pan", -1.0f, 1.0f, kPadPan[d]));
+            layout.add(choice((base + "Choke").toRawUTF8(), nm + " Choke",
+                { "Off", "1", "2", "3", "4" }, kPadChoke[d]));
+        }
+    }
 
     // ---- SEQUENCERS (bass live at M1; acid/drums/pad params pre-wired) ----
     for (int p = 0; p < 4; ++p) {
@@ -156,6 +175,16 @@ public:
         acidDecay = r("acidDecay");   acidAccent = r("acidAccent");
         acidOctave = r("acidOctave"); acidLevel = r("acidLevel");
 
+        for (int d = 0; d < 8; ++d) {
+            const juce::String base = "drum" + juce::String(d + 1);
+            drumTune[d]  = r((base + "Tune").toRawUTF8());
+            drumDecay[d] = r((base + "Decay").toRawUTF8());
+            drumCut[d]   = r((base + "Cut").toRawUTF8());
+            drumLvl[d]   = r((base + "Lvl").toRawUTF8());
+            drumPan[d]   = r((base + "Pan").toRawUTF8());
+            drumChoke[d] = r((base + "Choke").toRawUTF8());
+        }
+
         for (int p = 0; p < 4; ++p) {
             seqOn[p]    = r(detail::kSeqIds[p][0]);
             seqRate[p]  = r(detail::kSeqIds[p][1]);
@@ -215,6 +244,16 @@ public:
         e.acid.octave = (int) acidOctave->load() - 1;
         e.acid.level  = acidLevel->load();
 
+        for (int d = 0; d < 8; ++d) {
+            auto& pd = e.drum.pads[d];
+            pd.tune   = drumTune[d]->load();
+            pd.decay  = drumDecay[d]->load();
+            pd.cutoff = drumCut[d]->load();
+            pd.level  = drumLvl[d]->load();
+            pd.pan    = drumPan[d]->load();
+            pd.choke  = (int) drumChoke[d]->load();
+        }
+
         for (int p = 0; p < 4; ++p) {
             e.seq[p].on     = seqOn[p]->load() > 0.5f;
             e.seq[p].rate   = (int) seqRate[p]->load();
@@ -268,6 +307,9 @@ private:
     std::atomic<float>* acidRes{};    std::atomic<float>* acidEnvMod{};
     std::atomic<float>* acidDecay{};  std::atomic<float>* acidAccent{};
     std::atomic<float>* acidOctave{}; std::atomic<float>* acidLevel{};
+    std::atomic<float>* drumTune[8]{};  std::atomic<float>* drumDecay[8]{};
+    std::atomic<float>* drumCut[8]{};   std::atomic<float>* drumLvl[8]{};
+    std::atomic<float>* drumPan[8]{};   std::atomic<float>* drumChoke[8]{};
     std::atomic<float>* seqOn[4]{};   std::atomic<float>* seqRate[4]{};
     std::atomic<float>* seqLen[4]{};  std::atomic<float>* seqDir[4]{};
     std::atomic<float>* seqSwing[4]{};

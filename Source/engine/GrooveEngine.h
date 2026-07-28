@@ -5,6 +5,7 @@
 #include "Patterns.h"
 #include "parts/BassPart.h"
 #include "parts/AcidPart.h"
+#include "parts/DrumPart.h"
 #include "fx/StereoDelay.h"
 #include "fx/BloomReverb.h"
 
@@ -20,6 +21,8 @@ public:
     void prepare(double sampleRate, int maxBlockSize);
     void setParams(const EngineParams& p) { params = p; }
     void setPatterns(const GroovePatterns& g);
+    // refreshed every block by the processor; null slots use the DefaultKit
+    void setDrumSamples(const SampleBuffer* const bufs[8]) { drums.setSamples(bufs); }
 
     // midiChannel 1..4 -> bass, acid, drums, pad; other channels -> bass
     void noteOn(int midiChannel, int note, float velocity);
@@ -32,6 +35,7 @@ private:
     EngineParams params;
     BassPart bass;
     AcidPart acid;
+    DrumPart drums;
     StereoDelay delay;
     BloomReverb reverb;
 

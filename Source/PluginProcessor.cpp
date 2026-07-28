@@ -73,6 +73,15 @@ void MaruMoriProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
             engine.setPatterns(groove);
     }
 
+    {
+        const maru::SampleBuffer* bufs[8];
+        for (int s = 0; s < 8; ++s) {
+            bufs[s] = drumStores.acquire(s);
+            drumStores.markSeen(s, bufs[s]); // every block, even silent pads
+        }
+        engine.setDrumSamples(bufs);
+    }
+
     maru::TransportInfo transport;
     if (auto* playHead = getPlayHead()) {
         if (auto pos = playHead->getPosition()) {
@@ -103,14 +112,33 @@ void MaruMoriProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
 }
 
 void MaruMoriProcessor::getStateInformation(juce::MemoryBlock& destData) {
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    auto kit = state.getOrCreateChildWithName("DRUMKIT", nullptr);
+    for (int s = 0; s < 8; ++s)
+        kit.setProperty("path" + juce::String(s), drumStores.path(s), nullptr);
+    if (auto xml = state.createXml())
         copyXmlToBinary(*xml, destData);
 }
 
 void MaruMoriProcessor::setStateInformation(const void* data, int sizeInBytes) {
     if (auto xml = getXmlFromBinary(data, sizeInBytes)) {
-        apvts.replaceState(juce::ValueTree::fromXml(*xml));
+        auto state = juce::ValueTree::fromXml(*xml);
+        apvts.replaceState(state);
         loadGrooveFromState();
+        auto kit = state.getChildWithName("DRUMKIT");
+        if (kit.isValid()) {
+            juce::StringArray paths;
+            for (int s = 0; s < 8; ++s)
+                paths.add(kit.getProperty("path" + juce::String(s)).toString());
+            juce::MessageManager::callAsync([this, paths] {
+                for (int s = 0; s < 8; ++s) {
+                    if (paths[s].isEmpty()) { drumStores.clearSlot(s); continue; }
+                    juce::File f(paths[s]);
+                    if (f.existsAsFile())
+                        drumStores.load(s, f); // missing file: keep DefaultKit
+                }
+            });
+        }
     }
 }
 

@@ -33,7 +33,8 @@ inline constexpr float  kSeqPlainVel    = 0.72f;
 
 // -- mixer / master --
 inline constexpr float kMixSmoothTau    = 0.010f; // 10 ms level/pan smoothing
-inline constexpr float kMasterGuardDrive = 0.6f;  // tanh knee: unity to ~-6 dBFS
+// master safety clip is a bare tanh after gain: ceiling exactly 1.0,
+// transparent below ~-12 dBFS (verified by the bass-iso sub-spectrum probe)
 inline constexpr float kMasterHpLoHz    = 18.0f;  // full-range mode (CBL sub default)
 inline constexpr float kMasterHpHiHz    = 70.0f;  // 303-style HP mode
 

@@ -51,6 +51,27 @@ struct AcidParams {
     float level  = 0.8f;
 };
 
+// One-shot sample drums, 8 pads.
+struct DrumPadParams {
+    float tune   = 0.0f;  // semitones -24..+24
+    float decay  = 1.0f;  // 0..1 log 10 ms..4 s; >= 0.98 = ring out
+    float cutoff = 1.0f;  // pad LP, 1.0 = open
+    float level  = 0.8f;
+    float pan    = 0.0f;
+    int   choke  = 0;     // 0 = off, 1..4 = choke group
+};
+struct DrumParams {
+    DrumPadParams pads[8]; // kick, snare, clap, ch, oh, tom, rim, shaker
+    DrumParams() {         // mirror the APVTS defaults in Params.h
+        constexpr float kPan[8]  = { 0.0f, 0.0f, 0.15f, -0.2f, -0.2f, 0.3f, -0.35f, 0.4f };
+        constexpr int   kChoke[8] = { 0, 0, 0, 1, 1, 0, 0, 0 }; // CH+OH share group 1
+        for (int i = 0; i < 8; ++i) {
+            pads[i].pan = kPan[i];
+            pads[i].choke = kChoke[i];
+        }
+    }
+};
+
 struct PartSeqParams {
     bool  on     = false;
     int   rate   = 0;      // index into kSeqRateBeats
@@ -99,6 +120,7 @@ struct MasterParams {
 struct EngineParams {
     BassParams    bass;
     AcidParams    acid;
+    DrumParams    drum;
     PartSeqParams seq[4];  // bass, acid, drums, pad
     MixerParams   mix;
     DelayParams   dly;

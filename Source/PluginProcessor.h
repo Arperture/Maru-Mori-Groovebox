@@ -2,6 +2,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "Params.h"
 #include "engine/GrooveEngine.h"
+#include "sampler/SampleStore.h"
 
 class MaruMoriProcessor : public juce::AudioProcessor {
 public:
@@ -38,6 +39,9 @@ public:
     // Message thread edits under grooveLock; processBlock try-locks and copies.
     void setGrooveFromUi(const maru::GroovePatterns& g);
     maru::GroovePatterns getGroove() const;
+
+    // drum sample slots (message-thread loads, RT-safe handoff)
+    maru::DrumSampleStores drumStores;
 
 private:
     void handleMidiEvent(const juce::MidiMessage& m);

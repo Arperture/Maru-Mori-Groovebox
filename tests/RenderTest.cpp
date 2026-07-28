@@ -444,6 +444,74 @@ int caseAcidAccent() {
     return fails;
 }
 
+// Soft CBL drum groove: sparse kick, offbeat hats with an OH choke moment.
+void addDrumGroove(GroovePatterns& g) {
+    const auto on = [&](int lane, int step, bool acc = false) {
+        g.drums.cells[lane][step] = { true, acc };
+    };
+    on(0, 0, true); on(0, 8); on(0, 10);          // kick
+    on(1, 4); on(1, 12);                          // snare
+    for (int s = 2; s < 16; s += 4) on(3, s);     // CH offbeats
+    on(4, 14);                                    // OH before the loop
+    on(7, 6); on(7, 15);                          // shaker accents
+    return;
+}
+
+// M4: a single kick one-shot dies after sample+decay — no loop-wrap tail.
+int caseDrumOneshot() {
+    EngineParams p;
+    auto r = renderEvents(p, {}, 3.0, {
+        { 0.10, 3, 36, 0.9f, true }, // ch 3, note 36 -> pad 0 (kick)
+    });
+    int fails = 0;
+    fails += !check(allFinite(r.L, r.R), "drum-oneshot: finite");
+    fails += !check(peakOf(r.L, r.R) <= 1.0f, "drum-oneshot: peak <= 1");
+    fails += !check(rmsDb(r.L, 0.10, 0.40) > -35.0f, "drum-oneshot: kick audible");
+    // default kick is 0.55 s: well before 1.5 s everything must be silent
+    fails += !check(rmsDb(r.L, 1.5, 3.0) < -70.0f, "drum-oneshot: no tail past sample end");
+    writeWav(gOutBase + "-drum-oneshot.wav", r.L, r.R);
+    return fails;
+}
+
+// M4: closed hat chokes the ringing open hat within milliseconds.
+int caseDrumChoke() {
+    EngineParams p; // CH (pad 3) and OH (pad 4) share choke group 1 by default
+    auto rChoked = renderEvents(p, {}, 2.0, {
+        { 0.10, 3, 40, 0.9f, true }, // OH
+        { 0.40, 3, 39, 0.9f, true }, // CH -> chokes OH
+    });
+    auto rFree = renderEvents(p, {}, 2.0, {
+        { 0.10, 3, 40, 0.9f, true }, // OH rings out alone
+    });
+    int fails = 0;
+    fails += !check(allFinite(rChoked.L, rChoked.R), "drum-choke: finite");
+    // compare the OH tail region after the CH hit has died (~25 ms tau)
+    const float freeTail   = rmsDb(rFree.L,   0.50, 0.65);
+    const float chokedTail = rmsDb(rChoked.L, 0.50, 0.65);
+    fails += !check(freeTail > -55.0f, "drum-choke: OH actually rings unchoked");
+    fails += !check(chokedTail < freeTail - 15.0f, "drum-choke: choke kills the OH tail");
+    writeWav(gOutBase + "-drum-choke.wav", rChoked.L, rChoked.R);
+    return fails;
+}
+
+// M4: grid accent cells hit harder than plain cells.
+int caseDrumAccent() {
+    EngineParams p;
+    p.seq[2].on = true;
+    p.seq[2].rate = 4; // 1/4: separable hits
+    p.freeBpm = 120.0;
+    GroovePatterns g;
+    g.drums.cells[1][0] = { true, true };  // snare, accented
+    g.drums.cells[1][2] = { true, false }; // snare, plain
+    auto r = renderEvents(p, g, 2.0, {});
+    int fails = 0;
+    fails += !check(allFinite(r.L, r.R), "drum-accent: finite");
+    const float acc   = rmsDb(r.L, 0.00, 0.15);
+    const float plain = rmsDb(r.L, 1.00, 1.15);
+    fails += !check(acc > plain + 1.5f, "drum-accent: accent louder");
+    return fails;
+}
+
 // Always-on listening render: the current full instrument state, CBL-voiced.
 // Lightly asserted — this case exists so every milestone leaves a WAV that
 // answers "does it sound like the record yet?" (the walk-away test).
@@ -476,8 +544,15 @@ int caseDemo() {
     p.dly.toVerb = 0.3f;
     p.vrb.decay = 0.65f;
     p.vrb.shimmer = 0.25f;
+    p.seq[2].on = true;     // drums
+    p.seq[2].rate = 0;      // 1/16
+    p.seq[2].swing = 0.15f;
+    p.mix.level[2] = 0.7f;
+    p.mix.vrbSend[2] = 0.25f;
+    p.mix.dlySend[2] = 0.15f;
     auto groove = makeBassGroove();
     groove.acid = makeAcidGroove().acid;
+    addDrumGroove(groove);
     auto r = renderEvents(p, groove, 20.0, {});
     int fails = 0;
     fails += !check(allFinite(r.L, r.R), "demo: finite");
@@ -498,6 +573,9 @@ constexpr Case kCases[] = {
     { "free-run",    caseFreeRun },
     { "acid-iso",    caseAcidIso },
     { "acid-accent", caseAcidAccent },
+    { "drum-oneshot", caseDrumOneshot },
+    { "drum-choke",  caseDrumChoke },
+    { "drum-accent", caseDrumAccent },
     { "demo",        caseDemo },
 };
 
