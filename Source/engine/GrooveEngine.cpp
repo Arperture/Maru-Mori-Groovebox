@@ -29,11 +29,22 @@ void GrooveEngine::prepare(double sampleRate, int maxBlockSize) {
     }
 }
 
+void GrooveEngine::setPatterns(const GrooveBanks& g) {
+    bass.setPatterns(g.bass);
+    acid.setPatterns(g.acid);
+    drums.setGrids(g.drums);
+    pad.setPatterns(g.pad);
+}
+
 void GrooveEngine::setPatterns(const GroovePatterns& g) {
-    bass.setPattern(g.bass);
-    acid.setPattern(g.acid);
-    drums.setGrid(g.drums);
-    pad.setPattern(g.pad);
+    GrooveBanks b;
+    for (int i = 0; i < kNumBanks; ++i) {
+        b.bass[i] = g.bass;
+        b.acid[i] = g.acid;
+        b.drums[i] = g.drums;
+        b.pad[i] = g.pad;
+    }
+    setPatterns(b);
 }
 
 void GrooveEngine::noteOn(int midiChannel, int note, float velocity) {
@@ -82,11 +93,23 @@ void GrooveEngine::process(float* left, float* right, int numSamples,
     musicalPos += numSamples * beatsPerSample;
 
     // -- parts render into scratch (each OVERWRITES its buffers)
-    bass.setParams(params.bass, params.seq[0]);
+    // global accent: 0.5 neutral -> 0..2x scale on every part's accent depth.
+    // Applied on LOCAL copies — process() runs once per segment, and the
+    // member snapshot must never be scaled twice.
+    const float accScale = params.master.accent * 2.0f;
+    const auto clamp01 = [](float v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); };
+    BassParams bp = params.bass;
+    bp.accent = clamp01(bp.accent * accScale);
+    AcidParams ap = params.acid;
+    ap.accent = clamp01(ap.accent * accScale);
+    DrumParams dp = params.drum;
+    dp.accentScale = accScale;
+
+    bass.setParams(bp, params.seq[0]);
     bass.render(partL[0].data(), partR[0].data(), numSamples, clock);
-    acid.setParams(params.acid, params.seq[1]);
+    acid.setParams(ap, params.seq[1]);
     acid.render(partL[1].data(), partR[1].data(), numSamples, clock);
-    drums.setParams(params.drum, params.seq[2]);
+    drums.setParams(dp, params.seq[2]);
     drums.render(partL[2].data(), partR[2].data(), numSamples, clock);
     pad.setParams(params.pad, params.seq[3]);
     pad.render(partL[3].data(), partR[3].data(), numSamples, clock);

@@ -131,8 +131,8 @@ void AcidPart::fireStep(long long stepNum, double stepBeats, double swingOff) {
         nextPatStep = mapDirection(stepNum + 1);
     }
 
-    const AcidStep& s = pattern.steps[patStep];
-    const AcidStep& next = pattern.steps[nextPatStep];
+    const AcidStep& s = patterns[activeBank].steps[patStep];
+    const AcidStep& next = patterns[activeBank].steps[nextPatStep];
 
     if (s.gate) {
         const int note = s.note + 12 * (s.oct + params.octave);
@@ -203,6 +203,11 @@ void AcidPart::render(float* L, float* R, int numSamples, const ClockState& cloc
                 stepClock.reset();
             }
             const double pos = clock.beatAt(i);
+            const long long bar = (long long) std::floor(pos * 0.25);
+            if (bar != lastBar) {
+                lastBar = bar;
+                activeBank = seq.bank < 0 ? 0 : (seq.bank >= kNumBanks ? kNumBanks - 1 : seq.bank);
+            }
             const long long n = stepClock.tick(pos, stepBeats, swingOff);
             if (n != -1) {
                 fireStep(n, stepBeats, swingOff);

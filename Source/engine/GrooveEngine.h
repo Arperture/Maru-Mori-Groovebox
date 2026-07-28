@@ -21,7 +21,8 @@ class GrooveEngine {
 public:
     void prepare(double sampleRate, int maxBlockSize);
     void setParams(const EngineParams& p) { params = p; }
-    void setPatterns(const GroovePatterns& g);
+    void setPatterns(const GrooveBanks& g);
+    void setPatterns(const GroovePatterns& g); // convenience: same in all banks
     // refreshed every block by the processor; null slots use the DefaultKit
     void setDrumSamples(const SampleBuffer* const bufs[8]) { drums.setSamples(bufs); }
 

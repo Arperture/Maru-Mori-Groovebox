@@ -15,11 +15,11 @@ inline const char* kMixIds[4][4] = {
     { "mixDrumLvl", "mixDrumPan", "mixDrumDSend", "mixDrumRSend" },
     { "mixPadLvl",  "mixPadPan",  "mixPadDSend",  "mixPadRSend"  },
 };
-inline const char* kSeqIds[4][5] = {
-    { "seqBassOn", "seqBassRate", "seqBassLen", "seqBassDir", "seqBassSwing" },
-    { "seqAcidOn", "seqAcidRate", "seqAcidLen", "seqAcidDir", "seqAcidSwing" },
-    { "seqDrumOn", "seqDrumRate", "seqDrumLen", "seqDrumDir", "seqDrumSwing" },
-    { "seqPadOn",  "seqPadRate",  "seqPadLen",  "seqPadDir",  "seqPadSwing"  },
+inline const char* kSeqIds[4][6] = {
+    { "seqBassOn", "seqBassRate", "seqBassLen", "seqBassDir", "seqBassSwing", "seqBassBank" },
+    { "seqAcidOn", "seqAcidRate", "seqAcidLen", "seqAcidDir", "seqAcidSwing", "seqAcidBank" },
+    { "seqDrumOn", "seqDrumRate", "seqDrumLen", "seqDrumDir", "seqDrumSwing", "seqDrumBank" },
+    { "seqPadOn",  "seqPadRate",  "seqPadLen",  "seqPadDir",  "seqPadSwing",  "seqPadBank"  },
 };
 inline const char* kPartName[4] = { "Bass", "Acid", "Drum", "Pad" };
 inline const char* kPadName[8] = { "Kick", "Snare", "Clap", "CH", "OH", "Tom", "Rim", "Shaker" };
@@ -121,6 +121,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         layout.add(choice(detail::kSeqIds[p][3], nm + " Seq Dir",
             { "Forward", "Reverse", "Pendulum", "Random" }, 0));
         layout.add(f(detail::kSeqIds[p][4], nm + " Seq Swing", 0.0f, 1.0f, 0.0f));
+        layout.add(choice(detail::kSeqIds[p][5], nm + " Seq Bank",
+            { "A", "B", "C", "D" }, 0)); // applied at the next bar boundary
     }
 
     // ---- MIXER ----
@@ -160,6 +162,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     layout.add(f("masterGain", "Master Gain", 0.0f, 1.5f, 0.9f));
     layout.add(choice("masterHp", "Master HP", { "18 Hz", "70 Hz" }, 0));
     layout.add(f("masterBpm", "Internal BPM", 40.0f, 200.0f, 100.0f));
+    layout.add(f("masterAccent", "Global Accent", 0.0f, 1.0f, 0.5f));
 
     return layout;
 }
@@ -214,6 +217,7 @@ public:
             seqLen[p]   = r(detail::kSeqIds[p][2]);
             seqDir[p]   = r(detail::kSeqIds[p][3]);
             seqSwing[p] = r(detail::kSeqIds[p][4]);
+            seqBank[p]  = r(detail::kSeqIds[p][5]);
             mixLvl[p]   = r(detail::kMixIds[p][0]);
             mixPan[p]   = r(detail::kMixIds[p][1]);
             mixDSend[p] = r(detail::kMixIds[p][2]);
@@ -234,6 +238,7 @@ public:
         masterGain = r("masterGain");
         masterHp   = r("masterHp");
         masterBpm  = r("masterBpm");
+        masterAccent = r("masterAccent");
     }
 
     EngineParams snapshot() const {
@@ -297,6 +302,7 @@ public:
             e.seq[p].length = (int) seqLen[p]->load();
             e.seq[p].dir    = (int) seqDir[p]->load();
             e.seq[p].swing  = seqSwing[p]->load();
+            e.seq[p].bank   = (int) seqBank[p]->load();
             e.mix.level[p]   = mixLvl[p]->load();
             e.mix.pan[p]     = mixPan[p]->load();
             e.mix.dlySend[p] = mixDSend[p]->load();
@@ -325,6 +331,7 @@ public:
 
         e.master.gain   = masterGain->load();
         e.master.hpMode = (int) masterHp->load();
+        e.master.accent = masterAccent->load();
         e.freeBpm       = (double) masterBpm->load();
         return e;
     }
@@ -356,7 +363,7 @@ private:
     std::atomic<float>* drumPan[8]{};   std::atomic<float>* drumChoke[8]{};
     std::atomic<float>* seqOn[4]{};   std::atomic<float>* seqRate[4]{};
     std::atomic<float>* seqLen[4]{};  std::atomic<float>* seqDir[4]{};
-    std::atomic<float>* seqSwing[4]{};
+    std::atomic<float>* seqSwing[4]{}; std::atomic<float>* seqBank[4]{};
     std::atomic<float>* mixLvl[4]{};  std::atomic<float>* mixPan[4]{};
     std::atomic<float>* mixDSend[4]{}; std::atomic<float>* mixRSend[4]{};
     std::atomic<float>* dlySync{};    std::atomic<float>* dlyDiv{};
@@ -369,7 +376,7 @@ private:
     std::atomic<float>* vrbShim{};    std::atomic<float>* vrbShimInt{};
     std::atomic<float>* vrbFreeze{};  std::atomic<float>* vrbRet{};
     std::atomic<float>* masterGain{}; std::atomic<float>* masterHp{};
-    std::atomic<float>* masterBpm{};
+    std::atomic<float>* masterBpm{};  std::atomic<float>* masterAccent{};
 };
 
 } // namespace maru::params

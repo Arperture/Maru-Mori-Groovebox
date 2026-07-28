@@ -17,7 +17,9 @@ class DrumPart {
 public:
     void prepare(double sampleRate, int maxBlockSize);
     void setParams(const DrumParams& p, const PartSeqParams& s) { params = p; seq = s; }
-    void setGrid(const DrumGrid& g) { grid = g; }
+    void setGrids(const DrumGrid (&banks)[kNumBanks]) {
+        for (int b = 0; b < kNumBanks; ++b) grids[b] = banks[b];
+    }
     // refreshed every block by the processor; null slot -> DefaultKit pad
     void setSamples(const SampleBuffer* const bufs[8]);
 
@@ -34,7 +36,9 @@ private:
 
     DrumParams    params;
     PartSeqParams seq;
-    DrumGrid      grid;
+    DrumGrid      grids[kNumBanks];
+    int           activeBank = 0;
+    long long     lastBar = -0x7fffffffffffffLL;
     StepClock     stepClock;
     DefaultKit    defaultKit;
 

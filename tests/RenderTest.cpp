@@ -644,6 +644,58 @@ int caseMixerPan() {
     return fails;
 }
 
+// M7: a requested bank change waits for the next bar boundary, then the new
+// bank's notes play — verified spectrally (bank A = A2, bank B = A3).
+int caseBankSwitch() {
+    GrooveEngine e;
+    e.prepare(kSR, kBlock);
+
+    GrooveBanks banks;
+    for (int b = 0; b < kNumBanks; ++b)
+        for (auto& s : banks.bass[b].steps) {
+            s.gate = true; s.oct = 0; s.accent = false; s.slide = false;
+            s.gateLen = 2; s.slideT = 0; s.cvOct = 0.0f;
+            s.note = b == 0 ? 45 : 57; // A2 in bank A, A3 elsewhere
+        }
+    e.setPatterns(banks);
+
+    EngineParams p;
+    p.seq[0].on = true;
+    p.seq[0].rate = 1;      // 1/8
+    p.freeBpm = 120.0;      // bar = 2 s
+    p.bass.subLevel = 0.0f; // clean fundamental for the spectral probe
+    p.bass.cutoff = 0.9f;
+    p.bass.envMod = 0.0f;
+    e.setParams(p);
+
+    const int total = (int) (8.0 * kSR);
+    std::vector<float> L((size_t) total), Rr((size_t) total);
+    TransportInfo t; // free-run
+    int done = 0;
+    bool switched = false;
+    while (done < total) {
+        const int n = total - done < kBlock ? total - done : kBlock;
+        if (!switched && done >= (int) (5.0 * kSR)) {
+            p.seq[0].bank = 1; // request mid-bar (bar 2.5): lands at bar 3 = 6 s
+            e.setParams(p);
+            switched = true;
+        }
+        e.process(L.data() + done, Rr.data() + done, n, t);
+        done += n;
+    }
+
+    int fails = 0;
+    fails += !check(allFinite(L, Rr), "bank-switch: finite");
+    const float beforeA2 = goertzelDb(L, 110.0, 5.0, 5.9);
+    const float beforeA3 = goertzelDb(L, 220.0, 5.0, 5.9);
+    const float afterA2  = goertzelDb(L, 110.0, 6.2, 7.9);
+    const float afterA3  = goertzelDb(L, 220.0, 6.2, 7.9);
+    fails += !check(beforeA2 > beforeA3, "bank-switch: still bank A before the bar");
+    fails += !check(afterA3 > afterA2, "bank-switch: bank B lands after the bar");
+    writeWav(gOutBase + "-bank-switch.wav", L, Rr);
+    return fails;
+}
+
 // Always-on listening render: the current full instrument state, CBL-voiced.
 // Lightly asserted — this case exists so every milestone leaves a WAV that
 // answers "does it sound like the record yet?" (the walk-away test).
@@ -725,6 +777,7 @@ constexpr Case kCases[] = {
     { "seq-align",   caseSeqAlign },
     { "fx-worst-case", caseFxWorstCase },
     { "mixer-pan",   caseMixerPan },
+    { "bank-switch", caseBankSwitch },
     { "demo",        caseDemo },
 };
 

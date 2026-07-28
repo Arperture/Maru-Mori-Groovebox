@@ -37,8 +37,8 @@ public:
     // Pattern data: authoritative copy for the audio thread, serialized into
     // the GROOVE state ValueTree side-block (never as automatable params).
     // Message thread edits under grooveLock; processBlock try-locks and copies.
-    void setGrooveFromUi(const maru::GroovePatterns& g);
-    maru::GroovePatterns getGroove() const;
+    void setGrooveFromUi(const maru::GrooveBanks& g);
+    maru::GrooveBanks getGroove() const;
 
     // drum sample slots (message-thread loads, RT-safe handoff)
     maru::DrumSampleStores drumStores;
@@ -52,7 +52,7 @@ private:
     maru::GrooveEngine engine;
 
     mutable juce::SpinLock grooveLock;
-    maru::GroovePatterns groove;
+    maru::GrooveBanks groove;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MaruMoriProcessor)
 };

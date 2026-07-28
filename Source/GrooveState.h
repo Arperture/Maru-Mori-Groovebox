@@ -13,7 +13,7 @@
 namespace maru::state {
 
 inline constexpr const char* kGrooveType = "GROOVE";
-inline constexpr int kGrooveVersion = 1;
+inline constexpr int kGrooveVersion = 2; // v2: 4 banks per part (b0..b3 suffixes)
 
 // --- packing -----------------------------------------------------------------
 
@@ -121,34 +121,71 @@ inline void unpackChord(const juce::String& s, PadChord& c) {
 
 // --- tree <-> struct ---------------------------------------------------------
 
-inline void writeGroove(juce::ValueTree& parent, const GroovePatterns& g) {
+inline void writeGroove(juce::ValueTree& parent, const GrooveBanks& g) {
     auto t = parent.getOrCreateChildWithName(kGrooveType, nullptr);
+    t.removeAllProperties(nullptr);
     t.setProperty("ver", kGrooveVersion, nullptr);
-    t.setProperty("bass", packBass(g.bass), nullptr);
-    t.setProperty("acid", packAcid(g.acid), nullptr);
-    for (int l = 0; l < 8; ++l) {
-        t.setProperty("d" + juce::String(l), packLane(g.drums, l, false), nullptr);
-        t.setProperty("da" + juce::String(l), packLane(g.drums, l, true), nullptr);
+    for (int b = 0; b < kNumBanks; ++b) {
+        const juce::String sb(b);
+        t.setProperty("bass" + sb, packBass(g.bass[b]), nullptr);
+        t.setProperty("acid" + sb, packAcid(g.acid[b]), nullptr);
+        for (int l = 0; l < 8; ++l) {
+            t.setProperty("d" + juce::String(l) + "b" + sb,
+                          packLane(g.drums[b], l, false), nullptr);
+            t.setProperty("da" + juce::String(l) + "b" + sb,
+                          packLane(g.drums[b], l, true), nullptr);
+        }
+        t.setProperty("pad" + sb, packPad(g.pad[b]), nullptr);
+        for (int c = 0; c < 4; ++c)
+            t.setProperty("c" + juce::String(c) + "b" + sb,
+                          packChord(g.pad[b].chords[c]), nullptr);
     }
-    t.setProperty("pad", packPad(g.pad), nullptr);
-    for (int c = 0; c < 4; ++c)
-        t.setProperty("c" + juce::String(c), packChord(g.pad.chords[c]), nullptr);
 }
 
-inline GroovePatterns readGroove(const juce::ValueTree& parent) {
-    GroovePatterns g;
+inline GrooveBanks readGroove(const juce::ValueTree& parent) {
+    GrooveBanks g;
     auto t = parent.getChildWithName(kGrooveType);
     if (!t.isValid())
         return g;
-    unpackBass(t.getProperty("bass").toString(), g.bass);
-    unpackAcid(t.getProperty("acid").toString(), g.acid);
-    for (int l = 0; l < 8; ++l) {
-        unpackLane(t.getProperty("d" + juce::String(l)).toString(), g.drums, l, false);
-        unpackLane(t.getProperty("da" + juce::String(l)).toString(), g.drums, l, true);
+
+    const int ver = (int) t.getProperty("ver", 1);
+    if (ver < 2) {
+        // v1 session: single pattern set -> load into bank A, copy to B-D so
+        // a bank switch never lands on an empty pattern
+        GroovePatterns p;
+        unpackBass(t.getProperty("bass").toString(), p.bass);
+        unpackAcid(t.getProperty("acid").toString(), p.acid);
+        for (int l = 0; l < 8; ++l) {
+            unpackLane(t.getProperty("d" + juce::String(l)).toString(), p.drums, l, false);
+            unpackLane(t.getProperty("da" + juce::String(l)).toString(), p.drums, l, true);
+        }
+        unpackPad(t.getProperty("pad").toString(), p.pad);
+        for (int c = 0; c < 4; ++c)
+            unpackChord(t.getProperty("c" + juce::String(c)).toString(), p.pad.chords[c]);
+        for (int b = 0; b < kNumBanks; ++b) {
+            g.bass[b] = p.bass;
+            g.acid[b] = p.acid;
+            g.drums[b] = p.drums;
+            g.pad[b] = p.pad;
+        }
+        return g;
     }
-    unpackPad(t.getProperty("pad").toString(), g.pad);
-    for (int c = 0; c < 4; ++c)
-        unpackChord(t.getProperty("c" + juce::String(c)).toString(), g.pad.chords[c]);
+
+    for (int b = 0; b < kNumBanks; ++b) {
+        const juce::String sb(b);
+        unpackBass(t.getProperty("bass" + sb).toString(), g.bass[b]);
+        unpackAcid(t.getProperty("acid" + sb).toString(), g.acid[b]);
+        for (int l = 0; l < 8; ++l) {
+            unpackLane(t.getProperty("d" + juce::String(l) + "b" + sb).toString(),
+                       g.drums[b], l, false);
+            unpackLane(t.getProperty("da" + juce::String(l) + "b" + sb).toString(),
+                       g.drums[b], l, true);
+        }
+        unpackPad(t.getProperty("pad" + sb).toString(), g.pad[b]);
+        for (int c = 0; c < 4; ++c)
+            unpackChord(t.getProperty("c" + juce::String(c) + "b" + sb).toString(),
+                        g.pad[b].chords[c]);
+    }
     return g;
 }
 

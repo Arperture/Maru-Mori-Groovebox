@@ -84,10 +84,13 @@ void DrumPart::fireStep(long long stepNum) {
         patStep = mapDirection(stepNum);
     }
 
+    const float accVel = tune::kSeqPlainVel
+        + (tune::kSeqAccentVel - tune::kSeqPlainVel)
+          * (params.accentScale > 1.0f ? 1.0f : params.accentScale);
     for (int lane = 0; lane < 8; ++lane) {
-        const DrumCell& c = grid.cells[lane][patStep];
+        const DrumCell& c = grids[activeBank].cells[lane][patStep];
         if (c.on)
-            firePad(lane, c.accent ? tune::kSeqAccentVel : tune::kSeqPlainVel);
+            firePad(lane, c.accent ? accVel : tune::kSeqPlainVel);
     }
 }
 
@@ -115,6 +118,11 @@ void DrumPart::render(float* L, float* R, int numSamples, const ClockState& cloc
                 stepClock.reset();
             }
             const double pos = clock.beatAt(i);
+            const long long bar = (long long) std::floor(pos * 0.25);
+            if (bar != lastBar) {
+                lastBar = bar;
+                activeBank = seq.bank < 0 ? 0 : (seq.bank >= kNumBanks ? kNumBanks - 1 : seq.bank);
+            }
             const long long n = stepClock.tick(pos, stepBeats, swingOff);
             if (n != -1)
                 fireStep(n);

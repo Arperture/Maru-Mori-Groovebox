@@ -53,6 +53,16 @@ struct GroovePatterns {
     PadPattern  pad;
 };
 
+// Four banks (A-D) per part. Bank selection is a parameter; the engine
+// applies a requested bank change at the next bar boundary (queued switch).
+inline constexpr int kNumBanks = 4;
+struct GrooveBanks {
+    BassPattern bass[kNumBanks];
+    AcidPattern acid[kNumBanks];
+    DrumGrid    drums[kNumBanks];
+    PadPattern  pad[kNumBanks];
+};
+
 // Avalon per-step tables (shared by bass part; acid uses fixed 303 gate frac)
 inline constexpr float kGateFracs[4]  = { 0.10f, 0.30f, 0.50f, 0.90f };
 inline constexpr float kSlideTimes[4] = { 0.03f, 0.10f, 0.25f, 1.0f };

@@ -61,6 +61,7 @@ struct DrumPadParams {
     int   choke  = 0;     // 0 = off, 1..4 = choke group
 };
 struct DrumParams {
+    float accentScale = 1.0f; // set by the engine from master.accent
     DrumPadParams pads[8]; // kick, snare, clap, ch, oh, tom, rim, shaker
     DrumParams() {         // mirror the APVTS defaults in Params.h
         constexpr float kPan[8]  = { 0.0f, 0.0f, 0.15f, -0.2f, -0.2f, 0.3f, -0.35f, 0.4f };
@@ -95,6 +96,7 @@ struct PartSeqParams {
     int   length = 16;
     int   dir    = 0;      // 0 FWD, 1 REV, 2 PENDULUM, 3 RANDOM
     float swing  = 0.0f;
+    int   bank   = 0;      // requested pattern bank A-D; applied at bar start
 };
 
 struct MixerParams {
@@ -132,6 +134,7 @@ struct VerbParams {
 struct MasterParams {
     float gain   = 0.9f;  // linear
     int   hpMode = 0;     // 0 = 18 Hz full-range, 1 = 70 Hz
+    float accent = 0.5f;  // global accent: 0.5 neutral, scales all parts 0..2x
 };
 
 struct EngineParams {

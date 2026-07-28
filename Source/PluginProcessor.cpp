@@ -20,7 +20,7 @@ void MaruMoriProcessor::loadGrooveFromState() {
 }
 
 void MaruMoriProcessor::writeGrooveToState() {
-    maru::GroovePatterns g;
+    maru::GrooveBanks g;
     {
         const juce::SpinLock::ScopedLockType lock(grooveLock);
         g = groove;
@@ -28,7 +28,7 @@ void MaruMoriProcessor::writeGrooveToState() {
     maru::state::writeGroove(apvts.state, g);
 }
 
-void MaruMoriProcessor::setGrooveFromUi(const maru::GroovePatterns& g) {
+void MaruMoriProcessor::setGrooveFromUi(const maru::GrooveBanks& g) {
     {
         const juce::SpinLock::ScopedLockType lock(grooveLock);
         groove = g;
@@ -36,7 +36,7 @@ void MaruMoriProcessor::setGrooveFromUi(const maru::GroovePatterns& g) {
     writeGrooveToState();
 }
 
-maru::GroovePatterns MaruMoriProcessor::getGroove() const {
+maru::GrooveBanks MaruMoriProcessor::getGroove() const {
     const juce::SpinLock::ScopedLockType lock(grooveLock);
     return groove;
 }

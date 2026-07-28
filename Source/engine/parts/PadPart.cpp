@@ -74,15 +74,16 @@ void PadPart::allNotesOff() {
 }
 
 void PadPart::triggerChord(int chordIx) {
-    const PadChord& c = pattern.chords[chordIx < 0 ? 0 : (chordIx > 3 ? 3 : chordIx)];
+    const int ix = chordIx < 0 ? 0 : (chordIx > 3 ? 3 : chordIx);
+    const PadChord& c = patterns[activeBank].chords[ix];
     for (int i = 0; i < c.count && i < 4; ++i)
         noteOnInternal(c.notes[i], 0.8f);
-    curChord = chordIx;
+    curChord = ix;
 }
 
 void PadPart::releaseChord() {
     if (curChord < 0) return;
-    const PadChord& c = pattern.chords[curChord < 0 ? 0 : (curChord > 3 ? 3 : curChord)];
+    const PadChord& c = patterns[activeBank].chords[curChord];
     for (int i = 0; i < c.count && i < 4; ++i)
         noteOffInternal(c.notes[i]);
     curChord = -1;
@@ -118,7 +119,7 @@ void PadPart::fireStep(long long stepNum) {
         patStep = mapDirection(stepNum);
     }
 
-    const PadStep& s = pattern.steps[patStep];
+    const PadStep& s = patterns[activeBank].steps[patStep];
     if (s.tie)
         return;                 // hold whatever is sounding
     if (s.gate) {
@@ -173,6 +174,17 @@ void PadPart::render(float* L, float* R, int numSamples, const ClockState& clock
                 curChord = -1;
             }
             const double pos = clock.beatAt(i);
+            // release with the OLD bank's chord table before switching banks
+            const long long bar = (long long) std::floor(pos * 0.25);
+            if (bar != lastBar) {
+                lastBar = bar;
+                const int req = seq.bank < 0 ? 0
+                              : (seq.bank >= kNumBanks ? kNumBanks - 1 : seq.bank);
+                if (req != activeBank) {
+                    releaseChord();
+                    activeBank = req;
+                }
+            }
             const long long n = stepClock.tick(pos, stepBeats, swingOff);
             if (n != -1)
                 fireStep(n);

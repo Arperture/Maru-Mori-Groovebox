@@ -16,7 +16,9 @@ class AcidPart {
 public:
     void prepare(double sampleRate, int maxBlockSize);
     void setParams(const AcidParams& p, const PartSeqParams& s) { params = p; seq = s; }
-    void setPattern(const AcidPattern& p) { pattern = p; }
+    void setPatterns(const AcidPattern (&banks)[kNumBanks]) {
+        for (int b = 0; b < kNumBanks; ++b) patterns[b] = banks[b];
+    }
 
     void noteOn(int note, float velocity);   // ignored while seq.on
     void noteOff(int note);
@@ -34,7 +36,9 @@ private:
 
     AcidParams    params;
     PartSeqParams seq;
-    AcidPattern   pattern;
+    AcidPattern   patterns[kNumBanks];
+    int           activeBank = 0;
+    long long     lastBar = -0x7fffffffffffffLL;
     StepClock     stepClock;
 
     double sr = 48000.0;
