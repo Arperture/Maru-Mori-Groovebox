@@ -96,6 +96,21 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         }
     }
 
+    // ---- PAD (juno-flavored poly) ----
+    layout.add(f("padPwm",      "Pad PWM",       0.0f, 1.0f, 0.4f));
+    layout.add(f("padSubLevel", "Pad Sub Level", 0.0f, 1.0f, 0.4f));
+    layout.add(f("padCutoff",   "Pad Cutoff",    0.0f, 1.0f, 0.55f));
+    layout.add(f("padRes",      "Pad Resonance", 0.0f, 1.0f, 0.15f));
+    layout.add(f("padAttack",   "Pad Attack",    0.0f, 1.0f, 0.55f));
+    layout.add(f("padDecayEnv", "Pad Decay",     0.0f, 1.0f, 0.5f));
+    layout.add(f("padSustain",  "Pad Sustain",   0.0f, 1.0f, 0.7f));
+    layout.add(f("padRelease",  "Pad Release",   0.0f, 1.0f, 0.6f));
+    layout.add(f("padLfoRate",  "Pad LFO Rate",  0.0f, 1.0f, 0.3f));
+    layout.add(f("padLfoDepth", "Pad LFO Depth", 0.0f, 1.0f, 0.15f));
+    layout.add(f("padLfoDelay", "Pad LFO Delay", 0.0f, 1.0f, 0.5f));
+    layout.add(choice("padChorus", "Pad Chorus", { "Off", "I", "II", "Ensemble" }, 3));
+    layout.add(f("padLevel",    "Pad Trim",      0.0f, 1.0f, 0.7f));
+
     // ---- SEQUENCERS (bass live at M1; acid/drums/pad params pre-wired) ----
     for (int p = 0; p < 4; ++p) {
         const juce::String nm = detail::kPartName[p];
@@ -175,6 +190,14 @@ public:
         acidDecay = r("acidDecay");   acidAccent = r("acidAccent");
         acidOctave = r("acidOctave"); acidLevel = r("acidLevel");
 
+        padPwm = r("padPwm");         padSubLevel = r("padSubLevel");
+        padCutoff = r("padCutoff");   padRes = r("padRes");
+        padAttack = r("padAttack");   padDecayEnv = r("padDecayEnv");
+        padSustain = r("padSustain"); padRelease = r("padRelease");
+        padLfoRate = r("padLfoRate"); padLfoDepth = r("padLfoDepth");
+        padLfoDelay = r("padLfoDelay"); padChorus = r("padChorus");
+        padLevel = r("padLevel");
+
         for (int d = 0; d < 8; ++d) {
             const juce::String base = "drum" + juce::String(d + 1);
             drumTune[d]  = r((base + "Tune").toRawUTF8());
@@ -244,6 +267,20 @@ public:
         e.acid.octave = (int) acidOctave->load() - 1;
         e.acid.level  = acidLevel->load();
 
+        e.pad.pwm      = padPwm->load();
+        e.pad.subLevel = padSubLevel->load();
+        e.pad.cutoff   = padCutoff->load();
+        e.pad.res      = padRes->load();
+        e.pad.att      = padAttack->load();
+        e.pad.dec      = padDecayEnv->load();
+        e.pad.sus      = padSustain->load();
+        e.pad.rel      = padRelease->load();
+        e.pad.lfoRate  = padLfoRate->load();
+        e.pad.lfoDepth = padLfoDepth->load();
+        e.pad.lfoDelay = padLfoDelay->load();
+        e.pad.chorusMode = (int) padChorus->load();
+        e.pad.level    = padLevel->load();
+
         for (int d = 0; d < 8; ++d) {
             auto& pd = e.drum.pads[d];
             pd.tune   = drumTune[d]->load();
@@ -307,6 +344,13 @@ private:
     std::atomic<float>* acidRes{};    std::atomic<float>* acidEnvMod{};
     std::atomic<float>* acidDecay{};  std::atomic<float>* acidAccent{};
     std::atomic<float>* acidOctave{}; std::atomic<float>* acidLevel{};
+    std::atomic<float>* padPwm{};       std::atomic<float>* padSubLevel{};
+    std::atomic<float>* padCutoff{};    std::atomic<float>* padRes{};
+    std::atomic<float>* padAttack{};    std::atomic<float>* padDecayEnv{};
+    std::atomic<float>* padSustain{};   std::atomic<float>* padRelease{};
+    std::atomic<float>* padLfoRate{};   std::atomic<float>* padLfoDepth{};
+    std::atomic<float>* padLfoDelay{};  std::atomic<float>* padChorus{};
+    std::atomic<float>* padLevel{};
     std::atomic<float>* drumTune[8]{};  std::atomic<float>* drumDecay[8]{};
     std::atomic<float>* drumCut[8]{};   std::atomic<float>* drumLvl[8]{};
     std::atomic<float>* drumPan[8]{};   std::atomic<float>* drumChoke[8]{};

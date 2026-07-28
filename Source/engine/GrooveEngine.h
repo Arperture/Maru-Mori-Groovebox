@@ -6,6 +6,7 @@
 #include "parts/BassPart.h"
 #include "parts/AcidPart.h"
 #include "parts/DrumPart.h"
+#include "parts/PadPart.h"
 #include "fx/StereoDelay.h"
 #include "fx/BloomReverb.h"
 
@@ -36,6 +37,7 @@ private:
     BassPart bass;
     AcidPart acid;
     DrumPart drums;
+    PadPart pad;
     StereoDelay delay;
     BloomReverb reverb;
 

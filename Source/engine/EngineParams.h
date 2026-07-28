@@ -72,6 +72,23 @@ struct DrumParams {
     }
 };
 
+// Juno-flavored poly pad (8 voices, BBD chorus insert).
+struct PadParams {
+    float pwm      = 0.4f;   // pulse-width mod depth (LFO breathes it)
+    float subLevel = 0.4f;
+    float cutoff   = 0.55f;  // 0..1 -> 60 Hz..12 kHz
+    float res      = 0.15f;
+    float att      = 0.55f;  // ADSR, norm 0..1 log 5 ms..12 s
+    float dec      = 0.5f;
+    float sus      = 0.7f;
+    float rel      = 0.6f;
+    float lfoRate  = 0.3f;   // 0.1..8 Hz log
+    float lfoDepth = 0.15f;
+    float lfoDelay = 0.5f;   // juno ramp-in time
+    int   chorusMode = 3;    // 0 off, 1 I, 2 II, 3 Ensemble
+    float level    = 0.7f;
+};
+
 struct PartSeqParams {
     bool  on     = false;
     int   rate   = 0;      // index into kSeqRateBeats
@@ -121,6 +138,7 @@ struct EngineParams {
     BassParams    bass;
     AcidParams    acid;
     DrumParams    drum;
+    PadParams     pad;
     PartSeqParams seq[4];  // bass, acid, drums, pad
     MixerParams   mix;
     DelayParams   dly;

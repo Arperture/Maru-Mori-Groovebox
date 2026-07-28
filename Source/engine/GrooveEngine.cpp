@@ -9,6 +9,7 @@ void GrooveEngine::prepare(double sampleRate, int maxBlockSize) {
     bass.prepare(sampleRate, maxBlockSize);
     acid.prepare(sampleRate, maxBlockSize);
     drums.prepare(sampleRate, maxBlockSize);
+    pad.prepare(sampleRate, maxBlockSize);
     delay.prepare(sampleRate);
     reverb.prepare(sampleRate);
     for (int p = 0; p < 4; ++p) {
@@ -32,13 +33,14 @@ void GrooveEngine::setPatterns(const GroovePatterns& g) {
     bass.setPattern(g.bass);
     acid.setPattern(g.acid);
     drums.setGrid(g.drums);
+    pad.setPattern(g.pad);
 }
 
 void GrooveEngine::noteOn(int midiChannel, int note, float velocity) {
     switch (midiChannel) {
         case 2: acid.noteOn(note, velocity); break;
         case 3: drums.trigger(note - 36, velocity); break; // notes 36..43 -> pads
-        case 4: break; // pad (M5)
+        case 4: pad.noteOn(note, velocity); break;
         default: bass.noteOn(note, velocity); break;
     }
 }
@@ -46,7 +48,8 @@ void GrooveEngine::noteOn(int midiChannel, int note, float velocity) {
 void GrooveEngine::noteOff(int midiChannel, int note) {
     switch (midiChannel) {
         case 2: acid.noteOff(note); break;
-        case 3: case 4: break; // one-shots: note-off is meaningless
+        case 3: break; // one-shots: note-off is meaningless
+        case 4: pad.noteOff(note); break;
         default: bass.noteOff(note); break;
     }
 }
@@ -55,6 +58,7 @@ void GrooveEngine::allNotesOff() {
     bass.allNotesOff();
     acid.allNotesOff();
     drums.allNotesOff();
+    pad.allNotesOff();
 }
 
 void GrooveEngine::process(float* left, float* right, int numSamples,
@@ -84,12 +88,8 @@ void GrooveEngine::process(float* left, float* right, int numSamples,
     acid.render(partL[1].data(), partR[1].data(), numSamples, clock);
     drums.setParams(params.drum, params.seq[2]);
     drums.render(partL[2].data(), partR[2].data(), numSamples, clock);
-    for (int p = 3; p < 4; ++p) {
-        for (int i = 0; i < numSamples; ++i) {
-            partL[p][i] = 0.0f;
-            partR[p][i] = 0.0f;
-        }
-    }
+    pad.setParams(params.pad, params.seq[3]);
+    pad.render(partL[3].data(), partR[3].data(), numSamples, clock);
 
     // -- mixer: smoothed level + equal-power pan -> dry sum; post-level sends
     const float smoothCoef = 1.0f - std::exp(-1.0f

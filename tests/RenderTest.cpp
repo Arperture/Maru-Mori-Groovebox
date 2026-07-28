@@ -512,6 +512,72 @@ int caseDrumAccent() {
     return fails;
 }
 
+// M5: pad chord sequencer — chord holds through ties, chorus widens stereo,
+// release breathes out cleanly.
+int casePadHold() {
+    EngineParams p;
+    p.seq[3].on = true;
+    p.seq[3].rate = 6; // 1/1 steps: one chord per bar-ish
+    p.freeBpm = 120.0; // 1 step = 2 s
+    p.pad.att = 0.4f;
+    GroovePatterns g;
+    g.pad.steps[0] = { true, 0, false };  // Am chord
+    g.pad.steps[1] = { false, 0, true };  // tie: hold
+    g.pad.steps[2] = { false, 0, false }; // rest: release
+    for (int i = 3; i < 16; ++i) g.pad.steps[i] = { false, 0, false };
+    auto r = renderEvents(p, g, 8.0, {});
+    int fails = 0;
+    fails += !check(allFinite(r.L, r.R), "pad-hold: finite");
+    fails += !check(peakOf(r.L, r.R) <= 1.0f, "pad-hold: peak <= 1");
+    // chord sounding through the tie at 2..4 s
+    fails += !check(rmsDb(r.L, 2.5, 3.9) > -45.0f, "pad-hold: tie holds the chord");
+    // released by the rest at 4 s: well down by 7.5 s
+    const float held = rmsDb(r.L, 2.5, 3.9);
+    const float tail = rmsDb(r.L, 7.0, 8.0);
+    fails += !check(tail < held - 15.0f, "pad-hold: rest releases the chord");
+    // chorus decorrelates the channels
+    double diff = 0.0, sum = 0.0;
+    for (size_t i = (size_t) (1.0 * kSR); i < (size_t) (3.5 * kSR); ++i) {
+        diff += (double) (r.L[i] - r.R[i]) * (r.L[i] - r.R[i]);
+        sum  += (double) (r.L[i] + r.R[i]) * (r.L[i] + r.R[i]);
+    }
+    fails += !check(diff > sum * 0.002, "pad-hold: chorus stereo width");
+    writeWav(gOutBase + "-pad-hold.wav", r.L, r.R);
+    return fails;
+}
+
+// M5: all four sequencers derive steps from the same clock — the beat-1
+// onsets of a 1/8 bass and a 1/16 drum grid land together.
+int caseSeqAlign() {
+    const double bpm = 120.0;
+    // bass-only render
+    EngineParams pb = clickParams();
+    pb.seq[0].rate = 1; // 1/8
+    pb.freeBpm = bpm;
+    GroovePatterns gb = makeClickPattern();
+    auto rb = renderEvents(pb, gb, 3.0, {});
+    // drums-only render (kick on every grid step, 1/16)
+    EngineParams pd;
+    pd.seq[2].on = true;
+    pd.seq[2].rate = 0; // 1/16
+    pd.freeBpm = bpm;
+    GroovePatterns gd;
+    for (int s = 0; s < 16; ++s) gd.drums.cells[0][s] = { true, false };
+    auto rd = renderEvents(pd, gd, 3.0, {});
+
+    const auto ob = findOnsets(rb.L, -35.0f, 0.10);
+    const auto od = findOnsets(rd.L, -35.0f, 0.10);
+    int fails = 0;
+    fails += !check(!ob.empty() && !od.empty(), "seq-align: both parts fire");
+    if (!ob.empty() && !od.empty()) {
+        const double diff = std::fabs((double) ob[0] - (double) od[0]);
+        // onset detector hop is 128 samples; the step boundaries themselves
+        // are sample-identical (same ClockState arithmetic)
+        fails += !check(diff <= 256.0, "seq-align: beat-1 onsets aligned");
+    }
+    return fails;
+}
+
 // Always-on listening render: the current full instrument state, CBL-voiced.
 // Lightly asserted — this case exists so every milestone leaves a WAV that
 // answers "does it sound like the record yet?" (the walk-away test).
@@ -550,9 +616,22 @@ int caseDemo() {
     p.mix.level[2] = 0.7f;
     p.mix.vrbSend[2] = 0.25f;
     p.mix.dlySend[2] = 0.15f;
+    p.seq[3].on = true;     // pads: one chord per bar, Am - Fmaj7 - C - Em7
+    p.seq[3].rate = 6;      // 1/1
+    p.pad.att = 0.6f;
+    p.mix.level[3] = 0.5f;
+    p.mix.vrbSend[3] = 0.6f;
     auto groove = makeBassGroove();
     groove.acid = makeAcidGroove().acid;
     addDrumGroove(groove);
+    groove.pad.chords[0] = { { 57, 60, 64, 67 }, 4 }; // Am7
+    groove.pad.chords[1] = { { 53, 57, 60, 64 }, 4 }; // Fmaj7
+    groove.pad.chords[2] = { { 48, 55, 60, 64 }, 4 }; // C
+    groove.pad.chords[3] = { { 52, 55, 59, 62 }, 4 }; // Em7
+    for (int s = 0; s < 16; ++s)
+        groove.pad.steps[s] = (s & 1) == 0
+            ? PadStep{ true, (s / 2) % 4, false }
+            : PadStep{ false, 0, true };
     auto r = renderEvents(p, groove, 20.0, {});
     int fails = 0;
     fails += !check(allFinite(r.L, r.R), "demo: finite");
@@ -576,6 +655,8 @@ constexpr Case kCases[] = {
     { "drum-oneshot", caseDrumOneshot },
     { "drum-choke",  caseDrumChoke },
     { "drum-accent", caseDrumAccent },
+    { "pad-hold",    casePadHold },
+    { "seq-align",   caseSeqAlign },
     { "demo",        caseDemo },
 };
 
