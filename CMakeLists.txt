@@ -37,7 +37,8 @@ juce_add_plugin(MaruMori
 
 target_sources(MaruMori PRIVATE
   Source/PluginProcessor.cpp
-  Source/PluginEditor.cpp)
+  Source/PluginEditor.cpp
+  Source/ui/MainPanel.cpp)
 
 target_compile_definitions(MaruMori PUBLIC
   JUCE_WEB_BROWSER=0
