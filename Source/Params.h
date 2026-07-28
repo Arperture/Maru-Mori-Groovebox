@@ -67,6 +67,16 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     layout.add(choice("bassFr",  "Bass Range",      { "70 Hz", "Full" }, 1));
     layout.add(f("bassLevel",    "Bass Trim",       0.0f, 1.0f, 0.8f));
 
+    // ---- ACID (tb303 voice) ----
+    layout.add(choice("acidWave",  "Acid Wave", { "Saw", "Square" }, 0));
+    layout.add(f("acidCutoff", "Acid Cutoff",    0.0f, 1.0f, 0.35f));
+    layout.add(f("acidRes",    "Acid Resonance", 0.0f, 1.0f, 0.5f));
+    layout.add(f("acidEnvMod", "Acid Env Mod",   0.0f, 1.0f, 0.5f));
+    layout.add(f("acidDecay",  "Acid Decay",     0.0f, 1.0f, 0.4f));
+    layout.add(f("acidAccent", "Acid Accent",    0.0f, 1.0f, 0.6f));
+    layout.add(choice("acidOctave", "Acid Octave", { "-1", "0", "+1" }, 1));
+    layout.add(f("acidLevel",  "Acid Trim",      0.0f, 1.0f, 0.8f));
+
     // ---- SEQUENCERS (bass live at M1; acid/drums/pad params pre-wired) ----
     for (int p = 0; p < 4; ++p) {
         const juce::String nm = detail::kPartName[p];
@@ -141,6 +151,11 @@ public:
         bassGlide = r("bassGlide");     bassFr = r("bassFr");
         bassLevel = r("bassLevel");
 
+        acidWave = r("acidWave");     acidCutoff = r("acidCutoff");
+        acidRes = r("acidRes");       acidEnvMod = r("acidEnvMod");
+        acidDecay = r("acidDecay");   acidAccent = r("acidAccent");
+        acidOctave = r("acidOctave"); acidLevel = r("acidLevel");
+
         for (int p = 0; p < 4; ++p) {
             seqOn[p]    = r(detail::kSeqIds[p][0]);
             seqRate[p]  = r(detail::kSeqIds[p][1]);
@@ -191,6 +206,15 @@ public:
         e.bass.fr        = (int) bassFr->load();
         e.bass.level     = bassLevel->load();
 
+        e.acid.wave   = (int) acidWave->load();
+        e.acid.cutoff = acidCutoff->load();
+        e.acid.res    = acidRes->load();
+        e.acid.envMod = acidEnvMod->load();
+        e.acid.decay  = acidDecay->load();
+        e.acid.accent = acidAccent->load();
+        e.acid.octave = (int) acidOctave->load() - 1;
+        e.acid.level  = acidLevel->load();
+
         for (int p = 0; p < 4; ++p) {
             e.seq[p].on     = seqOn[p]->load() > 0.5f;
             e.seq[p].rate   = (int) seqRate[p]->load();
@@ -240,6 +264,10 @@ private:
     std::atomic<float>* bassVcfMod{}; std::atomic<float>* bassVcaMod{};
     std::atomic<float>* bassGlide{};  std::atomic<float>* bassFr{};
     std::atomic<float>* bassLevel{};
+    std::atomic<float>* acidWave{};   std::atomic<float>* acidCutoff{};
+    std::atomic<float>* acidRes{};    std::atomic<float>* acidEnvMod{};
+    std::atomic<float>* acidDecay{};  std::atomic<float>* acidAccent{};
+    std::atomic<float>* acidOctave{}; std::atomic<float>* acidLevel{};
     std::atomic<float>* seqOn[4]{};   std::atomic<float>* seqRate[4]{};
     std::atomic<float>* seqLen[4]{};  std::atomic<float>* seqDir[4]{};
     std::atomic<float>* seqSwing[4]{};

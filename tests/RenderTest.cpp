@@ -376,6 +376,74 @@ int caseFreeRun() {
     return fails;
 }
 
+// Slow CBL-style acid line: sparse, low, one slide pair, two accents.
+GroovePatterns makeAcidGroove() {
+    GroovePatterns g;
+    for (auto& s : g.acid.steps) s.gate = false;
+    const auto set = [&](int ix, int note, bool acc, bool slide) {
+        auto& s = g.acid.steps[ix];
+        s.gate = true; s.note = note; s.accent = acc; s.slide = slide;
+    };
+    set(0, 45, true, false);   // A2
+    set(2, 45, false, false);
+    set(5, 48, false, false);  // C3
+    set(6, 50, false, true);   // slide C->D
+    set(9, 45, false, false);
+    set(12, 57, true, false);  // A3 accent
+    set(13, 55, false, true);  // slide down
+    return g;
+}
+
+// M3: acid solo — audible, bounded, and byte-identical across two renders
+// (fixed seeds + shared clock => deterministic sequencing).
+int caseAcidIso() {
+    EngineParams p;
+    p.seq[1].on = true;
+    p.seq[1].rate = 0; // 1/16
+    p.seq[1].dir = 3;  // RANDOM: exercises the seeded xorshift path too
+    p.freeBpm = 100.0;
+    auto g = makeAcidGroove();
+    auto r1 = renderEvents(p, g, 8.0, {});
+    auto r2 = renderEvents(p, g, 8.0, {});
+    int fails = 0;
+    fails += !check(allFinite(r1.L, r1.R), "acid-iso: finite");
+    fails += !check(peakOf(r1.L, r1.R) <= 1.0f, "acid-iso: peak <= 1");
+    const float body = rmsDb(r1.L, 1.0, 7.0);
+    fails += !check(body > -40.0f && body < -6.0f, "acid-iso: RMS bounds");
+    fails += !check(r1.L == r2.L && r1.R == r2.R, "acid-iso: byte-identical renders");
+    writeWav(gOutBase + "-acid-iso.wav", r1.L, r1.R);
+    return fails;
+}
+
+// M3: the accent circuit boosts level, and a slide step does not retrigger
+// (no amplitude dip at the step boundary).
+int caseAcidAccent() {
+    EngineParams p;
+    p.seq[1].on = true;
+    p.seq[1].rate = 4; // 1/4 steps: separable hits
+    p.freeBpm = 120.0;
+    p.acid.accent = 1.0f; // full accent contrast
+    p.acid.level = 0.45f; // keep the output tanh in its linear region
+    GroovePatterns g;
+    for (auto& s : g.acid.steps) s.gate = false;
+    g.acid.steps[0] = { 45, 0, true, true,  false }; // accented
+    g.acid.steps[2] = { 45, 0, true, false, false }; // plain
+    g.acid.steps[4] = { 45, 0, true, false, false }; // -> slide pair
+    g.acid.steps[5] = { 50, 0, true, false, true  }; // slides from step 4
+    auto r = renderEvents(p, g, 4.0, {});
+    int fails = 0;
+    fails += !check(allFinite(r.L, r.R), "acid-accent: finite");
+    // steps at 0.5 s spacing: accented hit at 0.0, plain at 1.0
+    const float accPeak = rmsDb(r.L, 0.02, 0.20);
+    const float plainPeak = rmsDb(r.L, 1.02, 1.20);
+    fails += !check(accPeak > plainPeak + 2.0f, "acid-accent: accent louder");
+    // slide: gate must hold across the step-4 -> step-5 boundary at 2.5 s
+    const float atBoundary = rmsDb(r.L, 2.47, 2.53);
+    fails += !check(atBoundary > -30.0f, "acid-accent: slide holds gate (no dip)");
+    writeWav(gOutBase + "-acid-accent.wav", r.L, r.R);
+    return fails;
+}
+
 // Always-on listening render: the current full instrument state, CBL-voiced.
 // Lightly asserted — this case exists so every milestone leaves a WAV that
 // answers "does it sound like the record yet?" (the walk-away test).
@@ -391,6 +459,16 @@ int caseDemo() {
     p.bass.subLevel = 0.8f;
     p.mix.dlySend[0] = 0.5f;
     p.mix.vrbSend[0] = 0.35f;
+    p.seq[1].on = true;     // acid line over the bass
+    p.seq[1].rate = 0;      // 1/16
+    p.seq[1].swing = 0.15f;
+    p.acid.cutoff = 0.25f;
+    p.acid.res = 0.65f;
+    p.acid.envMod = 0.4f;
+    p.acid.octave = 0;
+    p.mix.level[1] = 0.55f;
+    p.mix.dlySend[1] = 0.7f;
+    p.mix.vrbSend[1] = 0.3f;
     p.dly.sync = true;
     p.dly.div = 3;          // dotted 1/8
     p.dly.feedback = 0.55f;
@@ -398,7 +476,9 @@ int caseDemo() {
     p.dly.toVerb = 0.3f;
     p.vrb.decay = 0.65f;
     p.vrb.shimmer = 0.25f;
-    auto r = renderEvents(p, makeBassGroove(), 20.0, {});
+    auto groove = makeBassGroove();
+    groove.acid = makeAcidGroove().acid;
+    auto r = renderEvents(p, groove, 20.0, {});
     int fails = 0;
     fails += !check(allFinite(r.L, r.R), "demo: finite");
     fails += !check(peakOf(r.L, r.R) <= 1.0f, "demo: peak <= 1");
@@ -416,6 +496,8 @@ constexpr Case kCases[] = {
     { "send-reverb", caseSendReverb },
     { "transport-resync", caseTransportResync },
     { "free-run",    caseFreeRun },
+    { "acid-iso",    caseAcidIso },
+    { "acid-accent", caseAcidAccent },
     { "demo",        caseDemo },
 };
 

@@ -4,6 +4,7 @@
 #include "ClockState.h"
 #include "Patterns.h"
 #include "parts/BassPart.h"
+#include "parts/AcidPart.h"
 #include "fx/StereoDelay.h"
 #include "fx/BloomReverb.h"
 
@@ -30,6 +31,7 @@ public:
 private:
     EngineParams params;
     BassPart bass;
+    AcidPart acid;
     StereoDelay delay;
     BloomReverb reverb;
 

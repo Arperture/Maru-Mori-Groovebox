@@ -39,6 +39,18 @@ struct BassParams {
     float level     = 0.8f;
 };
 
+// TB-303 acid line (tb303 port; constants live in AcidPart.cpp).
+struct AcidParams {
+    int   wave   = 0;     // 0 saw, 1 square
+    float cutoff = 0.35f; // 0..1 -> 80..4200 Hz exponential
+    float res    = 0.5f;
+    float envMod = 0.5f;
+    float decay  = 0.4f;
+    float accent = 0.6f;
+    int   octave = 0;     // -1 / 0 / +1 pattern transpose
+    float level  = 0.8f;
+};
+
 struct PartSeqParams {
     bool  on     = false;
     int   rate   = 0;      // index into kSeqRateBeats
@@ -86,6 +98,7 @@ struct MasterParams {
 
 struct EngineParams {
     BassParams    bass;
+    AcidParams    acid;
     PartSeqParams seq[4];  // bass, acid, drums, pad
     MixerParams   mix;
     DelayParams   dly;

@@ -17,7 +17,8 @@ FetchContent_MakeAvailable(JUCE)
 # offline render test so DSP can be verified without a host.
 add_library(maru_engine STATIC
   Source/engine/GrooveEngine.cpp
-  Source/engine/parts/BassPart.cpp)
+  Source/engine/parts/BassPart.cpp
+  Source/engine/parts/AcidPart.cpp)
 target_include_directories(maru_engine PUBLIC Source)
 
 juce_add_plugin(MaruMori

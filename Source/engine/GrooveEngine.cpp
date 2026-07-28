@@ -7,6 +7,7 @@ namespace maru {
 void GrooveEngine::prepare(double sampleRate, int maxBlockSize) {
     sr = sampleRate;
     bass.prepare(sampleRate, maxBlockSize);
+    acid.prepare(sampleRate, maxBlockSize);
     delay.prepare(sampleRate);
     reverb.prepare(sampleRate);
     for (int p = 0; p < 4; ++p) {
@@ -28,11 +29,12 @@ void GrooveEngine::prepare(double sampleRate, int maxBlockSize) {
 
 void GrooveEngine::setPatterns(const GroovePatterns& g) {
     bass.setPattern(g.bass);
+    acid.setPattern(g.acid);
 }
 
 void GrooveEngine::noteOn(int midiChannel, int note, float velocity) {
     switch (midiChannel) {
-        case 2: break; // acid (M3)
+        case 2: acid.noteOn(note, velocity); break;
         case 3: break; // drums (M4)
         case 4: break; // pad (M5)
         default: bass.noteOn(note, velocity); break;
@@ -41,13 +43,15 @@ void GrooveEngine::noteOn(int midiChannel, int note, float velocity) {
 
 void GrooveEngine::noteOff(int midiChannel, int note) {
     switch (midiChannel) {
-        case 2: case 3: case 4: break;
+        case 2: acid.noteOff(note); break;
+        case 3: case 4: break;
         default: bass.noteOff(note); break;
     }
 }
 
 void GrooveEngine::allNotesOff() {
     bass.allNotesOff();
+    acid.allNotesOff();
 }
 
 void GrooveEngine::process(float* left, float* right, int numSamples,
@@ -73,7 +77,9 @@ void GrooveEngine::process(float* left, float* right, int numSamples,
     // -- parts render into scratch (each OVERWRITES its buffers)
     bass.setParams(params.bass, params.seq[0]);
     bass.render(partL[0].data(), partR[0].data(), numSamples, clock);
-    for (int p = 1; p < 4; ++p) {
+    acid.setParams(params.acid, params.seq[1]);
+    acid.render(partL[1].data(), partR[1].data(), numSamples, clock);
+    for (int p = 2; p < 4; ++p) {
         for (int i = 0; i < numSamples; ++i) {
             partL[p][i] = 0.0f;
             partR[p][i] = 0.0f;
