@@ -578,6 +578,72 @@ int caseSeqAlign() {
     return fails;
 }
 
+// M6: everything hostile at once for 60 s — max delay feedback into a frozen
+// shimmering Bloom with every send maxed. Must stay finite, bounded, and
+// non-growing. Also the CPU audit: prints the realtime factor.
+int caseFxWorstCase() {
+    EngineParams p;
+    p.seq[0].on = true; p.seq[0].rate = 1;
+    p.seq[1].on = true; p.seq[1].rate = 0;
+    p.seq[2].on = true; p.seq[2].rate = 0;
+    p.seq[3].on = true; p.seq[3].rate = 6;
+    p.freeBpm = 140.0;
+    for (int i = 0; i < 4; ++i) {
+        p.mix.level[i] = 1.0f;
+        p.mix.dlySend[i] = 1.0f;
+        p.mix.vrbSend[i] = 1.0f;
+    }
+    p.dly.feedback = 0.85f; // the hard cap
+    p.dly.mode = 1;
+    p.dly.toVerb = 0.6f;    // the cap
+    p.dly.ret = 1.0f;
+    p.vrb.decay = 1.0f;
+    p.vrb.size = 1.0f;
+    p.vrb.modDepth = 1.0f;
+    p.vrb.shimmer = 1.0f;
+    p.vrb.freeze = true;
+    p.vrb.ret = 1.0f;
+    p.master.gain = 1.5f;   // max master
+
+    auto groove = makeBassGroove();
+    groove.acid = makeAcidGroove().acid;
+    addDrumGroove(groove);
+    for (int s = 0; s < 16; s += 2)
+        groove.pad.steps[s] = { true, s / 4, false };
+
+    const auto t0 = std::chrono::steady_clock::now();
+    auto r = renderEvents(p, groove, 60.0, {});
+    const auto t1 = std::chrono::steady_clock::now();
+    const double wallS = std::chrono::duration<double>(t1 - t0).count();
+    std::printf("  fx-worst-case: 60 s rendered in %.2f s (%.1f%% of one core)\n",
+                wallS, wallS / 60.0 * 100.0);
+
+    int fails = 0;
+    fails += !check(allFinite(r.L, r.R), "fx-worst-case: finite");
+    fails += !check(peakOf(r.L, r.R) <= 1.0f, "fx-worst-case: peak <= 1");
+    const float mid  = rmsDb(r.L, 30.0, 40.0);
+    const float late = rmsDb(r.L, 50.0, 60.0);
+    fails += !check(late <= mid + 1.0f, "fx-worst-case: no runaway growth");
+    fails += !check(wallS < 21.0, "fx-worst-case: CPU budget (< 35% of one core)");
+    return fails;
+}
+
+// M6: pan law — a hard-left part leaves the right channel silent (dry path).
+int caseMixerPan() {
+    EngineParams p;
+    p.mix.pan[0] = -1.0f;
+    auto r = renderEvents(p, {}, 2.0, {
+        { 0.1, 1, 45, 0.9f, true },
+        { 1.5, 1, 45, 0.0f, false },
+    });
+    int fails = 0;
+    const float lDb = rmsDb(r.L, 0.2, 1.4);
+    const float rDb = rmsDb(r.R, 0.2, 1.4);
+    fails += !check(lDb > -40.0f, "mixer-pan: left audible");
+    fails += !check(rDb < lDb - 40.0f, "mixer-pan: right silent when panned hard left");
+    return fails;
+}
+
 // Always-on listening render: the current full instrument state, CBL-voiced.
 // Lightly asserted — this case exists so every milestone leaves a WAV that
 // answers "does it sound like the record yet?" (the walk-away test).
@@ -657,6 +723,8 @@ constexpr Case kCases[] = {
     { "drum-accent", caseDrumAccent },
     { "pad-hold",    casePadHold },
     { "seq-align",   caseSeqAlign },
+    { "fx-worst-case", caseFxWorstCase },
+    { "mixer-pan",   caseMixerPan },
     { "demo",        caseDemo },
 };
 
